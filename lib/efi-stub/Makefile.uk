@@ -1,0 +1,94 @@
+#$(eval $(call addlib_s,LIBEFI_STUB,$(CONFIG_LIBEFI_STUB)))
+
+LIBEFI_STUB := libefi_stub
+
+ifeq (x86_64,$(CONFIG_UK_ARCH))
+LIBEFI_STUB_ELF_FORMAT = elf64-x86-64
+LIBEFI_STUB_TARGET_FORMAT = efi-app-x86_64
+else ifeq (arm64,$(CONFIG_UK_ARCH))
+LIBEFI_STUB_ELF_FORMAT = elf64-littleaarch64
+LIBEFI_STUB_TARGET_FORMAT = efi-app-aarch64
+endif
+
+$(eval $(call uc,$(LIBEFI_STUB))_BASE    := $(_IMPORT_BASE))
+$(eval $(call uc,$(LIBEFI_STUB))_BUILD   := $(BUILD_DIR)/$(LIBEFI_STUB))
+
+LIBGNU_EFI_VERSION = 3.0.15
+LIBGNU_EFI_BASENAME = gnu-efi-$(LIBGNU_EFI_VERSION)
+LIBGNU_EFI_BASE = $(BUILD_DIR)/libgnu_efi/origin/$(LIBGNU_EFI_BASENAME)
+LIBGNU_EFI_URL = https://sourceforge.net/projects/gnu-efi/files/$(LIBGNU_EFI_BASENAME).tar.bz2/download
+
+EFI_IMAGES := $(BUILD_DIR)/uk_efi_images
+
+LIBEFI_STUB_CFLAGS += -fPIC
+LIBEFI_STUB_CFLAGS += -ggdb3 -O0
+LIBEFI_STUB_CFLAGS += -ffreestanding
+LIBEFI_STUB_CFLAGS += -fno-stack-protector
+LIBEFI_STUB_CFLAGS += -fno-stack-check
+LIBEFI_STUB_CFLAGS += -fshort-wchar
+LIBEFI_STUB_CFLAGS += -mno-red-zone
+LIBEFI_STUB_CFLAGS += -maccumulate-outgoing-args
+LIBEFI_STUB_CFLAGS += -I$(LIBGNU_EFI_BASE)/inc
+
+LIBEFI_STUB_LDFLAGS += -shared
+LIBEFI_STUB_LDFLAGS += -fPIC
+LIBEFI_STUB_LDFLAGS += -Bsymbolic
+LIBEFI_STUB_LDFLAGS += -L$(LIBGNU_EFI_BASE)/$(CONFIG_UK_ARCH)/lib
+LIBEFI_STUB_LDFLAGS += -L$(LIBGNU_EFI_BASE)/$(CONFIG_UK_ARCH)/gnuefi
+LIBEFI_STUB_LDFLAGS += -T$(LIBEFI_STUB_BASE)/link.lds
+
+UK_IMG_SECTION := .uk_img
+
+LIBEFI_STUB_SECTIONS += .text
+LIBEFI_STUB_SECTIONS += .sdata
+LIBEFI_STUB_SECTIONS += .data
+LIBEFI_STUB_SECTIONS += .dynamic
+LIBEFI_STUB_SECTIONS += .dynsym
+LIBEFI_STUB_SECTIONS += .rel
+LIBEFI_STUB_SECTIONS += .rela
+LIBEFI_STUB_SECTIONS += .rel.*
+LIBEFI_STUB_SECTIONS += .rela.*
+LIBEFI_STUB_SECTIONS += .reloc
+LIBEFI_STUB_SECTIONS += .uk_img
+
+LIBEFI_STUB_MAIN_SRC += $(LIBEFI_STUB_BASE)/efi_main.c
+LIBEFI_STUB_MAIN_OBJ += $(LIBEFI_STUB_BUILD)/libefi_main.o
+LIBEFI_STUB_RELOC += $(LIBEFI_STUB_BUILD)/libefi_main.so
+
+EFI_CRT0 := $(LIBGNU_EFI_BASE)/$(CONFIG_UK_ARCH)/gnuefi/crt0-efi-$(CONFIG_UK_ARCH).o
+
+ifeq ($(CONFIG_LIBEFI_STUB),y)
+$(call mk_sub_build_dir,$(LIBEFI_STUB))
+$(eval $(call fetchas,libgnu_efi,$(LIBGNU_EFI_URL),$(LIBGNU_EFI_BASENAME).tar.bz2))
+UK_IMAGES-y += $(EFI_IMAGES)
+$(eval $(call cleanrule_lib,$(LIBEFI_STUB)))
+endif
+
+$(EFI_CRT0):
+	$(call build_cmd,MAKE,,libgnu_efi,\
+		$(MAKE) CFLAGS="-ggdb3 -O0 -DDEBUG -DEFI_DEBUG=1" -C $(LIBGNU_EFI_BASE))
+
+$(LIBEFI_STUB_MAIN_OBJ): $(LIBEFI_STUB_MAIN_SRC)
+	$(call build_cmd,CC,,$(LIBEFI_STUB_MAIN_OBJ), \
+		$(CC) $(LIBEFI_STUB_CFLAGS) -o $@ -c $^)
+
+.SECONDEXPANSION:
+$(EFI_IMAGES): $(EFI_CRT0) $(LIBEFI_STUB_MAIN_OBJ) $$(filter-out $$(EFI_IMAGES),$$(UK_IMAGES-y))
+	$(call build_cmd,LD,,$(LIBEFI_STUB_RELOC), \
+		ld $(LIBEFI_STUB_LDFLAGS) $(EFI_CRT0) $(LIBEFI_STUB_MAIN_OBJ) \
+		-o $(LIBEFI_STUB_RELOC) -lgnuefi -lefi)
+	@$(foreach uk_img,$(filter-out $(EFI_IMAGES),$(UK_IMAGES-y)), \
+        $(call verbose_cmd_inner,OBJCOPY,$(basename $(uk_img).efi), \
+		xxd -l4 $(uk_img) | grep "\.ELF" 2>&1 > /dev/null; \
+		if [ $$? -eq 0 ]; then \
+				$(OBJCOPY) -I $(LIBEFI_STUB_ELF_FORMAT) \
+						   -O $(LIBEFI_STUB_ELF_FORMAT) \
+						   --update-section $(UK_IMG_SECTION)=$(uk_img) \
+						   $(LIBEFI_STUB_RELOC); \
+				$(OBJCOPY) $(foreach s,$(LIBEFI_STUB_SECTIONS),-j $(s)) \
+                        --target $(LIBEFI_STUB_TARGET_FORMAT)  \
+						--subsystem=10 \
+						$(LIBEFI_STUB_RELOC) $(uk_img).efi; \
+				cp $(LIBEFI_STUB_RELOC) $(uk_img).dbg.efi; \
+		fi); \
+		echo $(uk_img).efi > $(EFI_IMAGES))

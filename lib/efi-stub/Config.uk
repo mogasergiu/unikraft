@@ -1,0 +1,3 @@
+menuconfig LIBEFI_STUB
+	bool "efi-stub: Enable EFI stub entry point"
+	default n
