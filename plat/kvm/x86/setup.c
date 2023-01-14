@@ -57,8 +57,21 @@
 #define MAX_CMDLINE_SIZE 8192
 static char cmdline[MAX_CMDLINE_SIZE];
 
+char *GOP_FB;
+uint32_t GOP_PITCH, GOP_H, GOP_W;
+
 struct kvmplat_config _libkvmplat_cfg = { 0 };
 struct uk_bootinfo bootinfo = { 0 };
+
+/*
+ * Why did I define it here? No reason... it was just the first file that
+ * that I had in my Neovim history and I had to have it declared globally
+ * somewhere, right?...
+ */
+void putfb(int x, int y, uint32_t pixel)
+{
+   *((uint32_t*)(GOP_FB + GOP_PITCH * y + 4 * x)) = pixel;
+}
 
 static void _convert_mbinfo(struct multiboot_info *mi)
 {
@@ -451,6 +464,11 @@ void _libkvmplat_entry(struct lcpu *lcpu, void *arg)
 {
 	struct multiboot_info *mi = (struct multiboot_info *)arg;
 	int rc;
+	/* see comment for `putfb` :) */
+	GOP_FB = mi->framebuffer_addr;
+	GOP_PITCH = mi->framebuffer_pitch;
+	GOP_W = mi->framebuffer_width;
+	GOP_H = mi->framebuffer_height;
 
 	_libkvmplat_init_console();
 

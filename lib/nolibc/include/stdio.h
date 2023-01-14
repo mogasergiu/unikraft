@@ -35,6 +35,7 @@
 #define __STDIO_H__
 
 #include <uk/essentials.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -61,6 +62,11 @@ extern FILE *stderr;
 #define __STDIO_H_DEFINED_va_list
 #define va_list __builtin_va_list
 #endif
+
+extern char *GOP_FB;
+extern uint32_t GOP_PITCH, GOP_H, GOP_W;
+
+extern void putfb(int x, int y, uint32_t pixel);
 
 int vsnprintf(char *str, size_t size, const char *fmt, va_list ap);
 int  snprintf(char *str, size_t size, const char *fmt, ...) __printf(3, 4);

@@ -85,7 +85,7 @@ ENTRY(multiboot_start32)
 	movl	$lcpu_boot_startup_args, %edi	/* startup args for boot CPU */
 	movl	%ebx, %esi			/* multiboot info */
 
-	jmp	lcpu_start32
+	jmp	lcpu_start64
 
 no_multiboot:
 	cli
