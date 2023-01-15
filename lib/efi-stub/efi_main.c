@@ -1,6 +1,6 @@
 #include <efi.h>
 #include <efilib.h>
-#include <string.h>
+#include "efi_guid.h"
 
 /*
  * Maybe I am doing something wrong but I failed to get these to be includable
@@ -19,6 +19,77 @@
 
 #define UEFI_GOP_DEFAULT_PIXEL_FORMAT PixelBlueGreenRedReserved8BitPerColor
 
+struct RSDPDescriptor {
+	char Signature[8];
+	uint8_t Checksum;
+	char OEMID[6];
+	uint8_t Revision;
+	uint32_t RsdtAddress;
+} __attribute__ ((packed));
+
+struct RSDPDescriptor20 {
+	struct RSDPDescriptor rsdt;
+
+	uint32_t Length;
+	uint64_t XsdtAddress;
+	uint8_t ExtendedChecksum;
+	uint8_t reserved[3];
+} __attribute__ ((packed));
+
+struct ACPISDTHeader {
+	char Signature[4];
+	uint32_t Length;
+	uint8_t Revision;
+	uint8_t Checksum;
+	char OEMID[6];
+	char OEMTableID[8];
+	uint32_t OEMRevision;
+	uint32_t CreatorID;
+	uint32_t CreatorRevision;
+} __attribute__ ((packed));
+
+struct RSDT {
+	struct ACPISDTHeader h;
+	uint32_t Entry[];
+} __attribute__ ((packed));
+
+struct XSDT {
+	struct ACPISDTHeader h;
+	uint64_t Entry[];
+} __attribute__ ((packed));
+
+struct PCI_ECAM {
+	uint64_t addr;
+	uint16_t seg;
+	uint8_t start_bus;
+	uint8_t end_bus;
+	uint32_t reserved;
+} __attribute__ ((packed));
+
+struct MCFG {
+	struct ACPISDTHeader h;
+	uint64_t Reserved;
+	struct PCI_ECAM pe[];
+} __attribute__ ((packed));
+
+struct pci_hdr {
+	uint16_t vendor_id;
+	uint16_t device_id;
+	uint16_t cmd;
+	uint16_t status;
+	uint8_t rev_id;
+	uint8_t prog_if;
+	uint8_t subclass;
+	uint8_t class_code;
+	uint8_t cache_line_size;
+	uint8_t latency_timer;
+#define TYPE_0_HEADER_SIZE 0x40
+#define TYPE_1_HEADER_SIZE 0x40
+#define TYPE_2_HEADER_SIZE 0x48
+	uint8_t header_type;
+	uint8_t bist;
+	/*... whatever other fields there are I only care about enumeration atm */
+} __attribute__ ((packed));
 /*
  * Basic Protected Mode, Ring 0 GDT
  */
@@ -119,10 +190,11 @@ static VOID EFIAPI efi_to_e820_mmap(IN EFI_MEMORY_DESCRIPTOR *efi_mmap,
                                   ((CHAR8 *) efi_mmap_entry + efi_desc_size);
                 paddr = efi_mmap_entry->PhysicalStart;
                 len = efi_mmap_entry->NumberOfPages << EFI_PAGE_SHIFT;
+/*
                 Print(L">%d UEFI: 0x%lx, %lu",
                         i, efi_mmap_entry->PhysicalStart,
 			efi_mmap_entry->NumberOfPages * EFI_PAGE_SIZE);
-
+*/
                 switch (efi_mmap_entry->Type) {
                 case EfiACPIReclaimMemory:
                         fill_e820_entry(e820_mmap, paddr,
@@ -155,9 +227,9 @@ static VOID EFIAPI efi_to_e820_mmap(IN EFI_MEMORY_DESCRIPTOR *efi_mmap,
                                         fill_e820_entry(e820_mmap, paddr,
                                                         EBDA_START - paddr,
                                                         MULTIBOOT_MEMORY_AVAILABLE);
-					Print(L" - E820: 0x%lx, %lu",
+/*					Print(L" - E820: 0x%lx, %lu",
 					      e820_mmap->addr,
-					      e820_mmap->len);
+					      e820_mmap->len);*/
 					i++;
                                         fill_e820_entry(e820_mmap, EBDA_END,
                                                         paddr + len - EBDA_END,
@@ -187,8 +259,8 @@ static VOID EFIAPI efi_to_e820_mmap(IN EFI_MEMORY_DESCRIPTOR *efi_mmap,
                         break;
                 }
 
-                Print(L" - E820 %x: 0x%lx, %lu, %u\n",
-		      e820_mmap, e820_mmap->addr, e820_mmap->len, e820_mmap->type);
+/*                Print(L" - E820 %x: 0x%lx, %lu, %u\n",
+		      e820_mmap, e820_mmap->addr, e820_mmap->len, e820_mmap->type);*/
                                 e820_mmap = (multiboot_memory_map_t *)
                         ((CHAR8 *)e820_mmap + (sizeof(*e820_mmap) +
                                 sizeof(multiboot_uint32_t)));
@@ -473,6 +545,141 @@ EFI_STATUS EFIAPI efi_main (IN EFI_HANDLE self_h, IN EFI_SYSTEM_TABLE *st)
 		gop->Mode->Info->PixelsPerScanLine
 	);
 
+	EFI_CONFIGURATION_TABLE *ct = st->ConfigurationTable;
+	UINTN nte = st->NumberOfTableEntries;
+	struct RSDPDescriptor *rsdp;
+	struct RSDPDescriptor20 *xsdp;
+	struct RSDT *rsdt = NULL;
+	struct XSDT *xsdt = NULL;
+	for (i = 0; i < nte; i++)
+		switch (ct[i].VendorGuid.Data1) {
+		case _MPS_TABLE_GUID:
+			Print(L"Found MPS Table at 0x%x\n", ct[i].VendorTable);
+
+			break;
+		case _ACPI_TABLE_GUID:
+			Print(L"Found ACPI Table at 0x%x\n", ct[i].VendorTable);
+			rsdp = ct[i].VendorTable;
+			rsdt = rsdp->RsdtAddress;
+
+			break;
+		case _ACPI_20_TABLE_GUID:
+			Print(L"Found ACPI_20 Table at 0x%x\n", ct[i].VendorTable);
+			xsdp = ct[i].VendorTable;
+			xsdt = xsdp->XsdtAddress;
+
+			break;
+		case _SMBIOS_TABLE_GUID:
+			Print(L"Found SMBIOS Table at 0x%x\n", ct[i].VendorTable);
+
+			break;
+		case _SMBIOS3_TABLE_GUID:
+			Print(L"Found SMBIOS3 Table at 0x%x\n", ct[i].VendorTable);
+
+			break;
+		case _SAL_SYSTEM_TABLE_GUID:
+			Print(L"Found SAL_SYSTEM Table at 0x%x\n", ct[i].VendorTable);
+
+			break;
+		case _HCDP_TABLE_GUID:
+			Print(L"Found HCDP Table at 0x%x\n", ct[i].VendorTable);
+
+			break;
+		case _UV_SYSTEM_TABLE_GUID:
+			Print(L"Found UV_SYSTEM Table at 0x%x\n", ct[i].VendorTable);
+
+			break;
+		case _EFI_SYSTEM_RESOURCE_TABLE_GUID:
+			Print(L"Found EFI_SYSTEM_RESOURCE Table at 0x%x\n", ct[i].VendorTable);
+
+			break;
+		case _EFI_PROPERTIES_TABLE_GUID:
+			Print(L"Found EFI_PROPERTIES Table at 0x%x\n", ct[i].VendorTable);
+
+			break;
+		case _EFI_MEMORY_ATTRIBUTES_TABLE_GUID:
+			Print(L"Found EFI_MEMORY_ATTRIBUTES_TABLE_GUID Table at 0x%x\n", ct[i].VendorTable);
+
+			break;
+		case _EFI_RT_PROPERTIES_TABLE_GUID:
+			Print(L"Found EFI_RT_PROPERTIES_TABLE_GUID Table at 0x%x\n", ct[i].VendorTable);
+
+			break;
+		case _EFI_DXE_SERVICES_TABLE_GUID:
+			Print(L"Found EFI_DXE_SERVICES Table at 0x%x\n", ct[i].VendorTable);
+
+			break;
+		}
+
+	/*
+	 * Spec says to use XSDT instead of RSDT if present but meh
+	 */
+	UINTN rsdt_entry_count = rsdt->h.Length - sizeof(struct ACPISDTHeader);
+	rsdt_entry_count /= sizeof(*rsdt->Entry);
+	for (i = 0; i < rsdt_entry_count; i++) {
+		struct ACPISDTHeader *ah = (struct ACPISDTHeader *) (uintptr_t)
+					   rsdt->Entry[i];
+
+		Print(L"RSDT: Found %c%c%c%c at 0x%x\n", ah->Signature[0],
+		      ah->Signature[1], ah->Signature[2], ah->Signature[3],
+		      rsdt->Entry[i]);
+	}
+
+	struct MCFG *mcfg = NULL;
+	if (xsdt) {
+		UINTN xsdt_entry_count = xsdt->h.Length -
+					 sizeof(struct ACPISDTHeader);
+		xsdt_entry_count /= sizeof(*xsdt->Entry);
+		for (i = 0; i < xsdt_entry_count; i++) {
+			struct ACPISDTHeader *ah = (struct ACPISDTHeader *)
+						   (uintptr_t) xsdt->Entry[i];
+
+			Print(L"XSDT: Found %c%c%c%c at 0x%x\n", ah->Signature[0],
+			      ah->Signature[1], ah->Signature[2], ah->Signature[3],
+			      xsdt->Entry[i]);
+
+			/* No memcmp... */
+			if (ah->Signature[0] == 'M' &&
+			    ah->Signature[1] == 'C' &&
+			    ah->Signature[2] == 'F' &&
+			    ah->Signature[3] == 'G')
+				mcfg = (struct MCFG *) xsdt->Entry[i];
+		}
+	}
+
+	if (mcfg) {
+		UINTN pci_ecam_count = mcfg->h.Length -
+				       sizeof(struct ACPISDTHeader);
+		pci_ecam_count /= sizeof(*mcfg->pe);
+
+		for (i = 0; i < pci_ecam_count; i++) {
+			Print(L"Found PCIe ECAM at 0x%x, seg 0x%x, start_bus "
+			      "0x%x, end_bus 0x%x\n", mcfg->pe[i].addr,
+			      mcfg->pe[i].seg, mcfg->pe[i].start_bus,
+			      mcfg->pe[i].end_bus);
+
+			/* EFI does not map these pages... yet..
+			 * will look into it so that I can see the devices
+			*/
+			struct pci_hdr *p;
+			for (int bus = 0; bus < mcfg->pe[i].end_bus; bus++)
+				for (int dev = 0; dev < 32; dev++)
+					for (int func = 0; func < 8; func++) {
+						p = (struct pci_hdr *)
+						    (mcfg->pe[i].addr +
+						    ((bus - mcfg->pe[i].start_bus) <<
+						    20 | dev << 15 | func << 12));
+
+						if (p->vendor_id == 0xffff)
+							continue;
+
+						Print(L"Probing PCIe dev at 0x%x"
+						      ", vendor_id 0x%x, "
+						      "device_id 0x%x\n",
+						      p, p->vendor_id, p->device_id);
+					}
+		}
+	}
 
 	/*
 	 * Start building the multiboot struct...
@@ -553,8 +760,7 @@ EFI_STATUS EFIAPI efi_main (IN EFI_HANDLE self_h, IN EFI_SYSTEM_TABLE *st)
 				   self_h, KEY);
 	if (EFI_ERROR(status)) {
 		status = EFIERR(status);
-                Print(L"Could not ExitBootServices 0x%x\n",
-		      gop_best_mode, status);
+                Print(L"Could not ExitBootServices 0x%x\n", status);
                 while (1);
         }
 
@@ -577,7 +783,6 @@ EFI_STATUS EFIAPI efi_main (IN EFI_HANDLE self_h, IN EFI_SYSTEM_TABLE *st)
 	uk_img_bss_end = (CHAR8 *) (uintptr_t) mbh->bss_end_addr;
 	while (uk_img_bss_ptr < uk_img_bss_end)
 		*uk_img_bss_ptr++ = 0;
-
 
 	/*
 	 * This should do for now... I guess...
