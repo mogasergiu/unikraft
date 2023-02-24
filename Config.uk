@@ -152,6 +152,18 @@ config OPTIMIZE_COMPRESS
 		Create compressed images. Please note that not all platforms
 		support compressing.
 
+if PLAT_KVM && ARCH_X86_64
+
+config ELF64_TO_32
+	bool "Convert the Unikernel's ELF64 headers to their ELF32 equivalents"
+	default n
+	help
+		Convert the Unikernel's ELF64 ELF Header, Program Headers and Section
+		Headers to their ELF32 equivalents. This is mainly used to fool
+		loaders that require an ELF32 into loading an ELF64.
+
+endif
+
 config RECORD_BUILDTIME
 	bool "Keep track of Building time"
 	default n
