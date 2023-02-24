@@ -1,0 +1,4 @@
+define build_elf64_to_32 =
+	$(call build_cmd,ELF32,,$(1).elf32,\
+        $(SCRIPTS_DIR)/elf64_to_32.py $(1))
+endef
