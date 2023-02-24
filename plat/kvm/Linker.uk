@@ -1,7 +1,6 @@
 ifeq (x86_64,$(CONFIG_UK_ARCH))
 KVM_LDFLAGS-y += -Wl,-m,elf_x86_64
 KVM_LDFLAGS-y += -Wl,--entry=_multiboot_entry
-KVM_STRIPFLAGS += --output-target elf32-i386
 else ifeq (arm64,$(CONFIG_UK_ARCH))
 KVM_LDFLAGS-y += -Wl,-m,aarch64elf
 KVM_LINK_LIBGCC_FLAG := -lgcc
@@ -56,6 +55,9 @@ $(KVM_IMAGE): $(KVM_IMAGE).dbg
 			$(KVM_STRIPFLAGS) \
 			$< -o $@ 2>&1 | \
 			{ grep -v "Empty loadable segment detected" || true; })
+ifeq ($(CONFIG_ELF64_TO_32),y)
+	$(call build_elf64_t_32,$@)
+endif
 
 $(KVM_IMAGE).sym: $(KVM_DEBUG_IMAGE)
 	$(call build_cmd,NM,,$@, $(NM) -n $< > $@)
