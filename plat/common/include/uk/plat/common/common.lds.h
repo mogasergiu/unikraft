@@ -172,6 +172,29 @@
 		. = ALIGN(__PAGE_SIZE);					\
 	}
 
+#define DYNAMIC_SECTIONS						\
+	.dynsym :							\
+	{								\
+		*(.dynsym)						\
+	} :data								\
+									\
+	.dynstr :							\
+	{								\
+		*(.dynstr)						\
+	} :data								\
+									\
+	.dynamic :							\
+	{								\
+		*(.dynamic)						\
+	} :data	:dynamic
+
+#define RELOCATION_SECTIONS						\
+	.rela.dyn :							\
+	{								\
+		*(.rela)						\
+		*(.rela.*)						\
+	} :data
+
 #define DISCARDS							\
 	/DISCARD/ :							\
 	{								\
