@@ -107,6 +107,8 @@ SECTIONS
 
 	DYNAMIC_SECTIONS
 
+	UK_RELOC_SECTION
+
 	RELOCATION_SECTIONS
 
 	.comment 0 : { *(.comment) }
