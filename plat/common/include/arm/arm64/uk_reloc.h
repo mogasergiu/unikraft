@@ -4,6 +4,15 @@
 #include <uk/plat/common/sections.h>
 #include <uk/uk_reloc.h>
 
+#ifdef __ASSEMBLY__
+
+.macro ur_ldr reg:req, sym:req
+	adrp	\reg, \sym
+	add	\reg, \reg, :lo12:\sym
+.endm
+
+#else /* __ASSEMBLY__ */
+
 static inline void st_curr_baddr(volatile void * volatile * baddr)
 {
 	__asm__ __volatile__(
@@ -15,5 +24,7 @@ static inline void st_curr_baddr(volatile void * volatile * baddr)
 		: "x0"
 	);
 }
+
+#endif /* !__ASSEMBLY__ */
 
 #endif /* __ARM_64_UK_RELOC_H__ */
