@@ -103,6 +103,10 @@ SECTIONS
 
 	_end = .;
 
+	DYNAMIC_SECTIONS
+
+	RELOCATION_SECTIONS
+
 	/* Sections to be discarded */
 	/* TODO: Revisit when we have a solution for discarded sections
 	/DISCARD/ : {
