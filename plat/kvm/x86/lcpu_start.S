@@ -37,8 +37,10 @@
 #include <uk/config.h>
 #include <uk/asm.h>
 #include <uk/plat/common/lcpu.h>
+#include <x86/uk_reloc.h>
 #include <x86/cpu_defs.h>
 #include <kvm-x86/traps.h>
+#include "lcpu_helpers.S"
 
 #define SEC_BEGIN(x)		.globl x86_##x##_begin; x86_##x##_begin = .;
 #define SEC_END(x)		.globl x86_##x##_end; x86_##x##_end = .;
@@ -53,7 +55,14 @@ x86_start16_addr:
 	.quad	LOAD_ADDR16
 
 /* The following section has to be copied to LOAD_ADDR16 (4KiB max!) at runtime
- * as 16-bit real mode entry point
+ * as 16-bit real mode entry point.
+ * `uk_reloc_{mov|data}` may be used in start16 to be able to cope with the
+ * fact that R_X86_64_16, R_X86_64_32 and R_X86_64_32S relocations are
+ * incompatible with an x86-64 PIE but they will not appear in the final binary,
+ * as mkukreloc.py will know they are redundant for the early relocator.
+ * Instead, these uk_reloc's will be hardcoded in a corresponding locally
+ * declared `struct uk_reloc` residing in the frame of the method that relocates
+ * this very code, during Application Processor environment setup.
  */
 .section .text.boot.16
 SEC_BEGIN(start16)
@@ -64,7 +73,12 @@ ENTRY(lcpu_start16_ap)
 	xorl	%edi, %edi
 	xorl	%esi, %esi
 
+#ifdef CONFIG_OPTIMIZE_PIE
+	ur_mov start16_lcpu_start16, %ax, 2, _phys
+	jmp     *%eax
+#else
 	jmp	lcpu_start16
+#endif
 END(lcpu_start16_ap)
 
 /*
@@ -83,7 +97,11 @@ gdt32_null:
 	.word	0x0000
 gdt32_ptr:
 	.word	(gdt32_end - gdt32 - 1)	/* size - 1	*/
-	.long	RELOC16(gdt32)		/* GDT address	*/
+#ifdef CONFIG_OPTIMIZE_PIE
+	ur_data long, start16_gdt32, 4, _phys	/* GDT address	*/
+#else
+	.long	RELOC16(gdt32)
+#endif
 gdt32_cs:
 	.quad	GDT_DESC_CODE32_VAL	/* 32-bit CS	*/
 gdt32_ds:
@@ -103,8 +121,32 @@ ENTRY(lcpu_start16)
 	movl	%eax, %cr0
 
 	/* Load 32-bit GDT and jump into 32-bit code segment */
+#if CONFIG_OPIMIZE_PIE
+	ur_mov start16_gdt32_ptr, %ax, 2, _phys
+	lgdt	(%eax)
+#else
 	lgdt	RELOC16(gdt32_ptr)
+#endif
+
+#ifdef CONFIG_OPTIMIZE_PIE
+	/* ljmp encoding has 5 opcodes, thus 40 bits, which in our case represent:
+	 * [39:31] = 0xea - the identifier opcode of ljmp itself
+	 * [31:15] = intersegment 2 byte immediate address to place into %eip
+	 * [15: 0] = value to be placed into code segment register
+	 * Thus, since we do not know the address of jump_to32 at runtime, we
+	 * will generate a reloc symbol to be resolved.
+	 * When we get to this point we would place into %eax the address
+	 * of jump_to32. For the ljmp to jump to this address we replace the
+	 * initial RELOC16(jump_to32) value with jump_to32 by patching at runtime
+	 * the [31:15] fields of ljmp - known to be at an offset of -4 bytes
+	 * ([15: 0] + [31:15]) from jump_to32, since this address corresponds
+	 * to the very next instruction in memory after our ljmp.
+	 */
+	ur_mov start16_jump_to32, %ax, 2, _phys
+	movl	%eax, -4(%eax)
+#endif
 	ljmp	$(gdt32_cs - gdt32), $RELOC16(jump_to32)
+
 .code32
 jump_to32:
 	/* Set up remaining segment registers */
@@ -117,7 +159,12 @@ jump_to32:
 	movl	%eax, %fs
 	movl	%eax, %gs
 
+#ifdef CONFIG_OPTIMIZE_PIE
+	ur_mov start16_lcpu_start32, %eax, 4, _phys
+#else
 	leal	lcpu_start32, %eax
+#endif
+
 	jmp	*%eax
 END(lcpu_start16)
 
@@ -134,6 +181,7 @@ SEC_END(start16)
  * potential platform boot arguments in ESI (e.g., multiboot) if this is the
  * first boot.
  */
+
 .section .data.boot.32
 .align 16
 gdt64:
@@ -146,7 +194,7 @@ gdt64_ds:
 gdt64_end:
 gdt64_ptr:
 	.word	gdt64_end - gdt64 - 1
-	.quad	gdt64
+	ur_data	quad, gdt64, 8, _phys
 
 #define CR4_BOOT32_SETTINGS						\
 	  X86_CR4_PAE	/* Physical Address Extension */
@@ -174,15 +222,26 @@ ENTRY(lcpu_start32)
 	wrmsr
 
 	/* Set boot page table and enable paging */
-	movl	$x86_bpt_pml4, %eax
+	ur_mov x86_bpt_pml4, %eax, 4, _phys
 	movl	%eax, %cr3
 
 	movl	$CR0_BOOT32_SETTINGS, %eax
 	movl	%eax, %cr0
 
 	/* Load 64-bit GDT and jump to 64-bit code segment */
-	lgdt	gdt64_ptr
-	ljmp	$(gdt64_cs - gdt64), $jump_to64
+	ur_mov gdt64_ptr, %eax, 4
+	lgdt    (%eax)
+
+	/* Again, we use the same strategy, only this time we generate an actual
+	 * uk_reloc entry to be automatically resolved by the early relocator,
+	 * instead of relying on the code that relocates the start16 section
+	 * before starting the Application Processors, since execution of
+	 * lcpu_start32 comes before that.
+	 */
+	ur_mov jump_to64, %eax, 4
+	movl	%eax, -6(%eax)
+	ljmp    $(gdt64_cs - gdt64), $UK_RELOC_PLACEHOLDER
+
 .code64
 jump_to64:
 	/* Set up remaining segment registers */
@@ -195,7 +254,7 @@ jump_to64:
 	movl	%eax, %fs
 	movl	%eax, %gs
 
-	leaq	lcpu_start64, %rcx
+	ur_mov lcpu_start64, %rcx, 4
 	jmp	*%rcx
 END(lcpu_start32)
 
@@ -214,7 +273,6 @@ END(lcpu_start32)
  *
  * NOTE: Code should be position-independent
  */
-#include "lcpu_helpers.S"
 
 .code64
 .section .text.boot.64
