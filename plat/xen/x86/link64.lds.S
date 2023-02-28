@@ -102,6 +102,10 @@ SECTIONS
 	}
 	*/
 
+	DYNAMIC_SECTIONS
+
+	RELOCATION_SECTIONS
+
 	.comment 0 : { *(.comment) }
 	DEBUG_SYMBOLS
 
