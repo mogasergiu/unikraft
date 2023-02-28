@@ -47,6 +47,7 @@ PHDRS
 	text PT_LOAD FLAGS(PHDRS_PF_RX);
 	rodata PT_LOAD FLAGS(PHDRS_PF_R);
 	data PT_LOAD;
+	dynamic PT_DYNAMIC;
 	tls PT_TLS;
 	tls_load PT_LOAD;
 	stack PT_GNU_STACK FLAGS(PHDRS_PF_RW);
