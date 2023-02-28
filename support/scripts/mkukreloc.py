@@ -140,13 +140,18 @@ def get_nm_sym_exp(sym):
     )
 
 # Return a dictionary only with the relevant fields described above
+# In the case of x86, we must take care in avoiding the start16_ symbols
+# that are used for the bootstrap code of the Application Processors
+# which will be relocated at runtime during SMP setup only, separately
+# from the early self relocator.
+x86_ignore_sym_substring = 'start16_'
 def get_nm_syms(elf, sym):
     nm_sym_exp = get_nm_sym_exp(sym)
     out = subprocess.check_output(["nm", elf])
 
     _nm_syms = re.findall(nm_sym_exp, out.decode('ASCII'), re.MULTILINE)
 
-    return [s for s in _nm_syms]
+    return [s for s in _nm_syms if x86_ignore_sym_substring not in s[1]]
 
 def rela_to_uk_reloc(rela):
     # Offset and Sym. Name + Addend already have the link time address added
@@ -215,7 +220,8 @@ def uk_reloc_sym_to_struct(elf, uk_reloc_sym):
 # See include/uk/uk_reloc.h.
 def build_uk_relocs(elf, rela_dyn_secs):
     uk_relocs = [rela_to_uk_reloc(r) for r in rela_dyn_secs]
-    uk_reloc_syms = get_nm_syms(elf, get_uk_reloc_sym_exp(r'data'))
+    uk_reloc_syms = get_nm_syms(elf, get_uk_reloc_sym_exp(r'imm'))
+    uk_reloc_syms += get_nm_syms(elf, get_uk_reloc_sym_exp(r'data'))
 
     # Also gather all of the PTE uk_reloc's for use against relocatable
     # PTE's.

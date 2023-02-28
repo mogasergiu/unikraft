@@ -33,6 +33,7 @@
 
 #include <uk/config.h>
 #include <uk/arch/paging.h>
+#include <uk/uk_reloc.h>
 
 #define PTE_RO		X86_PTE_PRESENT
 #define PTE_RW		(X86_PTE_PRESENT | X86_PTE_RW)
@@ -143,7 +144,7 @@ x86_bpt_pt0_0_0: /* 4K pages */
 
 .align 0x1000
 x86_bpt_pd0_0: /* 2M pages */
-	pte	 x86_bpt_pt0_0_0, PTE_RW
+	ur_pte	x86_bpt_pt0_0_0, PTE_RW
 	pte_fill 0x0000000000200000, 0x1ff, PD_LVL, PTE_RW
 
 x86_bpt_pd0_1: /* 2M pages */
@@ -157,10 +158,10 @@ x86_bpt_pd0_3: /* 2M pages */
 
 .align 0x1000
 x86_bpt_pdpt0: /* 1G pages */
-	pte	 x86_bpt_pd0_0, PTE_RW
-	pte	 x86_bpt_pd0_1, PTE_RW
-	pte	 x86_bpt_pd0_2, PTE_RW
-	pte	 x86_bpt_pd0_3, PTE_RW
+	ur_pte	x86_bpt_pd0_0, PTE_RW
+	ur_pte	x86_bpt_pd0_1, PTE_RW
+	ur_pte	x86_bpt_pd0_2, PTE_RW
+	ur_pte	x86_bpt_pd0_3, PTE_RW
 	pte_zero , 0x1fc
 
 /* Page table for 512 GiB direct-mapped physical memory */
@@ -173,10 +174,10 @@ x86_bpt_pdpt511: /* 1G pages */
 .align 0x1000
 .global x86_bpt_pml4
 x86_bpt_pml4:
-	pte	 x86_bpt_pdpt0  , PTE_RW
+	ur_pte	x86_bpt_pdpt0, PTE_RW
 	pte_zero , 0x1fe
 #ifdef CONFIG_PAGING
-	pte	 x86_bpt_pdpt511, PTE_RW
+	ur_pte	x86_bpt_pdpt511, PTE_RW
 #else
 	pte_zero , 0x001
 #endif /* CONFIG_PAGING */

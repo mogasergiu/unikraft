@@ -36,6 +36,7 @@
 
 #include <uk/config.h>
 #include <uk/asm.h>
+#include <x86/uk_reloc.h>
 
 #include <kvm-x86/multiboot.h>
 
@@ -50,6 +51,11 @@ multiboot_header:
 	.long MULTIBOOT_FLAGS
 	.long -(MULTIBOOT_HEADER_MAGIC+MULTIBOOT_FLAGS) /* checksum */
 
+.macro mb_r_quad, sym
+	.reloc ., R_X86_64_64, \sym
+	.space 8
+.endm
+
 /**
  * Stack and entry function to use during CPU initialization
  */
@@ -59,8 +65,8 @@ lcpu_bootstack:
 
 .section .rodata
 lcpu_boot_startup_args:
-	.quad	multiboot_entry
-	.quad	lcpu_bootstack
+	mb_r_quad multiboot_entry
+	mb_r_quad lcpu_bootstack
 
 /**
  * 32-bit multiboot entry function
@@ -77,10 +83,16 @@ ENTRY(_multiboot_entry)
 	cmpl	$MULTIBOOT_BOOTLOADER_MAGIC, %eax
 	jne	no_multiboot
 
-	movl	$lcpu_boot_startup_args, %edi	/* startup args for boot CPU */
+	movl $0x00100000, %edi
+	movl $0x00000000, %esi
+	movl $0x00100000, %edx
+	do_uk_reloc32 0
+
+	ur_mov lcpu_boot_startup_args, %edi, 4, _phys	/* startup args for boot CPU */
 	movl	%ebx, %esi			/* multiboot info */
 
-	jmp	lcpu_start32
+	ur_mov lcpu_start32, %ebx, 4, _phys
+	jmp *%ebx
 
 no_multiboot:
 	cli
