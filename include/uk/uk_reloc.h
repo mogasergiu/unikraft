@@ -61,6 +61,8 @@ static inline void apply_uk_reloc(volatile struct uk_reloc *ur, __u64 val,
 	}
 }
 
+void do_uk_reloc(volatile __paddr_t r_paddr, volatile __vaddr_t r_vaddr);
+
 #endif /* !__ASSEMBLY__ */
 
 #endif /* __UK_RELOC_H__ */
