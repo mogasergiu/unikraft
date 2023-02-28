@@ -36,6 +36,7 @@ PHDRS
 	data PT_LOAD;
 	tls PT_TLS;
 	tls_load PT_LOAD;
+	dynamic PT_DYNAMIC;
 	stack PT_GNU_STACK FLAGS(PHDRS_PF_RW);
 }
 
