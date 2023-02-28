@@ -87,6 +87,7 @@ END(lcpu_start16_ap)
  * It is only used as entry point for APs in SMP configuration.
  */
 .align 16
+.globl gdt32
 gdt32:
 /* We can repurpose the null segment to encode the GDT pointer because
  * the null segment is not accessed by the processor in 32-bit mode. We also
@@ -95,6 +96,7 @@ gdt32:
  */
 gdt32_null:
 	.word	0x0000
+.globl gdt32_ptr
 gdt32_ptr:
 	.word	(gdt32_end - gdt32 - 1)	/* size - 1	*/
 #ifdef CONFIG_OPTIMIZE_PIE
@@ -148,6 +150,7 @@ ENTRY(lcpu_start16)
 	ljmp	$(gdt32_cs - gdt32), $RELOC16(jump_to32)
 
 .code32
+.globl jump_to32
 jump_to32:
 	/* Set up remaining segment registers */
 	movl	$(gdt32_ds - gdt32), %eax
