@@ -44,6 +44,9 @@ ENTRY(_libxenplat_start)
 SECTIONS
 {
 	. = 0x0;
+
+	_base_addr = .;			/* Symbol to represent the load base address */
+
 	_text = .;			/* Text and read-only data */
 	.text : {
 		*(.text.boot)
