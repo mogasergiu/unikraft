@@ -34,18 +34,19 @@ endif
 ##
 ## Platform library definitions
 ##
-LIBXENPLAT_ASINCLUDES-y        += -I$(LIBXENPLAT_BASE)/include
-LIBXENPLAT_ASINCLUDES-y        += -I$(UK_PLAT_COMMON_BASE)/include
-LIBXENPLAT_CINCLUDES-y         += -I$(LIBXENPLAT_BASE)/include
-LIBXENPLAT_CINCLUDES-y         += -I$(UK_PLAT_COMMON_BASE)/include
+LIBXENPLAT_ASINCLUDES-y                    += -I$(LIBXENPLAT_BASE)/include
+LIBXENPLAT_ASINCLUDES-y                    += -I$(UK_PLAT_COMMON_BASE)/include
+LIBXENPLAT_CINCLUDES-y                     += -I$(LIBXENPLAT_BASE)/include
+LIBXENPLAT_CINCLUDES-y                     += -I$(UK_PLAT_COMMON_BASE)/include
 
-LIBXENPLAT_SRCS-y              += $(UK_PLAT_XEN_DEF_LDS)
-LIBXENPLAT_SRCS-y              += $(LIBXENPLAT_BASE)/hypervisor.c
-LIBXENPLAT_SRCS-y              += $(LIBXENPLAT_BASE)/memory.c
-LIBXENPLAT_SRCS-y              += $(LIBXENPLAT_BASE)/io.c
-LIBXENPLAT_SRCS-y              += $(UK_PLAT_COMMON_BASE)/lcpu.c|common
-LIBXENPLAT_SRCS-y              += $(UK_PLAT_COMMON_BASE)/memory.c|common
-LIBXENPLAT_SRCS-y              += $(UK_PLAT_COMMON_BASE)/tls.c|common
+LIBXENPLAT_SRCS-y                          += $(UK_PLAT_XEN_DEF_LDS)
+LIBXENPLAT_SRCS-y                          += $(LIBXENPLAT_BASE)/hypervisor.c
+LIBXENPLAT_SRCS-y                          += $(LIBXENPLAT_BASE)/memory.c
+LIBXENPLAT_SRCS-y                          += $(LIBXENPLAT_BASE)/io.c
+LIBXENPLAT_SRCS-y                          += $(UK_PLAT_COMMON_BASE)/lcpu.c|common
+LIBXENPLAT_SRCS-y                          += $(UK_PLAT_COMMON_BASE)/memory.c|common
+LIBXENPLAT_SRCS-y                          += $(UK_PLAT_COMMON_BASE)/tls.c|common
+LIBXENPLAT_SRCS-$(CONFIG_OPTIMIZE_PIE)     += $(UK_PLAT_COMMON_BASE)/uk_reloc.c|common
 
 LIBXENPLAT_SRCS-$(CONFIG_ARCH_X86_64) += $(UK_PLAT_COMMON_BASE)/x86/trace.c|common
 LIBXENPLAT_SRCS-$(CONFIG_ARCH_X86_64) += $(UK_PLAT_COMMON_BASE)/x86/traps.c|common
