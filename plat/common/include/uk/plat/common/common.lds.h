@@ -188,6 +188,13 @@
 		*(.dynamic)						\
 	} :data	:dynamic
 
+#define UK_RELOC_SECTION						\
+	. = ALIGN(0x1000);						\
+	.uk_reloc :							\
+	{								\
+		KEEP(*(.uk_reloc))					\
+	} :data
+
 #define RELOCATION_SECTIONS						\
 	.rela.dyn :							\
 	{								\
