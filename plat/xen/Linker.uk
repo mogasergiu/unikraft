@@ -44,6 +44,11 @@ $(XEN_IMAGE): $(XEN_DEBUG_IMAGE)
 			$(SECT_STRIP_FLAGS) $(SECT_STRIP_FLAGS-y) \
 			$< -o $@ 2>&1 | \
 			{ grep -v "Empty loadable segment detected" || true; })
+ifeq ($(CONFIG_OPTIMIZE_PIE),y)
+	$(SCRIPTS_DIR)/mkukreloc.py $@
+	$(OBJCOPY) --remove-section .rela.dyn $@
+	$(OBJCOPY) --update-section .uk_reloc=$@_uk_reloc.bin $@
+endif
 
 ifeq (arm,$(CONFIG_UK_ARCH))
 $(XEN_RAW_IMAGE): $(XEN_IMAGE)

@@ -86,15 +86,19 @@ M4FLAGS      += -DUK_VERSION=$(UK_VERSION).$(UK_SUBVERSION)
 # If GCC supports "-no-pie" flag, we will add this flag to link flags to
 # override "pie" option, because some distributions will set
 # "--enable-default-pie" by default.
-COMPFLAGS-$(call gcc_version_ge,6,1)	+= -fno-PIC
-LDFLAGS-$(call gcc_version_ge,6,1)	+= -no-pie
+COMPFLAGS-$(call gcc_version_ge,6,1)	+= -fPIE
+LDFLAGS-$(call gcc_version_ge,6,1)	+= -static-pie
+LDFLAGS-$(call gcc_version_ge,6,1)	+= -Wl,--no-dynamic-linker
+LDFLAGS-$(call gcc_version_ge,6,1)	+= -Wl,--no-export-dynamic
+LDFLAGS-$(call gcc_version_ge,6,1)	+= -z notext -z norelro
 ifeq ($(call gcc_version_ge,10,0),y)
 COMPFLAGS-y += -fhosted -ffreestanding -fno-tree-loop-distribute-patterns
 LIBLDFLAGS-$(CONFIG_OPTIMIZE_LTO) += -flinker-output=nolto-rel
 LDFLAGS-$(CONFIG_OPTIMIZE_LTO) += -flinker-output=nolto-rel
+COMPFLAGS-$(call have_clang)	+= -fno-PIC
+LDFLAGS-$(call have_clang)	+= -no-pie
 endif
 
 ASFLAGS-$(call have_clang)     += -mllvm -asm-macro-max-nesting-depth=1000
-COMPFLAGS-$(call have_clang)	+= -fno-builtin -fno-PIC
-LDFLAGS-$(call have_clang)	+= -no-pie
+COMPFLAGS-$(call have_clang)	+= -fno-builtin
 
