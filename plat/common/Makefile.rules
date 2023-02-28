@@ -2,3 +2,10 @@ define build_elf64_t_32 =
 	$(call build_cmd,ELF64_TO_32,,$(1).elf64,\
         $(SCRIPTS_DIR)/elf64_to_32.py $(1))
 endef
+
+define build_ukreloc =
+       $(call build_cmd,UKRELOC,,$(1)_uk_reloc.bin,\
+               $(SCRIPTS_DIR)/mkukreloc.py $(1) && \
+        $(OBJCOPY) --update-section .uk_reloc=$(1)_uk_reloc.bin $(1) 2>/dev/null && \
+        $(OBJCOPY) --remove-section .rela.dyn $(1))
+endef
