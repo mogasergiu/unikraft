@@ -23,6 +23,21 @@ do_uk_reloc:
 	ret
 #endif
 
+/**
+ * For proper positional independence we require that whatever page table
+ * related entries in the static page table we may have, they must be
+ * relocatable against a dynamic physical address.
+ */
+.macro ur_pte pte_sym:req, pte:req
+#ifdef CONFIG_OPTIMIZE_PIE
+	ur_data quad, \pte_sym, 8, _phys
+.globl \pte_sym\()_uk_reloc_pte_attr0
+.set \pte_sym\()_uk_reloc_pte_attr0, \pte
+#else
+	ur_data quad, (\pte_sym + \pte), 8, _phys
+#endif
+.endm
+
 #else  /* __ASSEMBLY__ */
 
 #include <uk/arch/types.h>
