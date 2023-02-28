@@ -35,6 +35,7 @@
 #include <uk/arch/lcpu.h>
 #include <uk/arch/limits.h>
 #include <uk/asm.h>
+#include <arm/arm64/uk_reloc.h>
 
 ENTRY(start_mmu)
 	/*
@@ -44,7 +45,7 @@ ENTRY(start_mmu)
 	dsb sy
 
 	/* Load ttbr0, pagetable starts from _end */
-	ldr x27, =arm64_bpt_l3_pt0
+	ur_ldr x27, arm64_bpt_l3_pt0
 	msr ttbr0_el1, x27
 	isb
 
@@ -91,8 +92,10 @@ ENTRY(start_mmu)
 	 * in D-Cache. Invalidate ranges that may have been modified:
 	 * DATA, BSS, PAGETABLE and BOOTSTACK.
 	 */
-	ldr x0, =_data
-	ldr x1, =_end
+	ur_ldr x0, _data
+
+	ur_ldr x1, _end
+
 	add x1, x1, #__STACK_SIZE
 	sub x1, x1, x0
 	bl clean_and_invalidate_dcache_range
