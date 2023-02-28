@@ -43,6 +43,9 @@
 /* _dtb: start of device tree */
 extern char _dtb[];
 
+/* _base_addr: base reference address as of link time */
+extern char _base_addr[];
+
 /* [_text, _etext]: contains .text.* sections */
 extern char _text[], _etext[];
 

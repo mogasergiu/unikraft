@@ -68,6 +68,8 @@ SECTIONS {
 	_start_ram_addr = .;
 	. = . + DTB_RESERVED_SIZE;
 
+	_base_addr = .;			/* Symbol to represent the load base address */
+
 	/* Code */
 	_text = .;
 	.text :
