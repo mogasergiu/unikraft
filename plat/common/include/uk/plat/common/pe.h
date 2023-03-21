@@ -1,0 +1,35 @@
+#ifndef __PLAT_CMN_FAKE_PE_H__
+#define __PLAT_CMN_FAKE_PE_H__
+
+/* Signature (Image Only) */
+#define PE_MAGIC					0x00004550
+
+/* COFF File Header (Object and Image) */
+#define	IMAGE_FILE_MACHINE_AMD64			0x8664
+#define IMAGE_FILE_MACHINE_ARM64			0xaa64
+
+/* Characteristics
+ * Flags for attributes of the object or image file
+ */
+#define IMAGE_FILE_DEBUG_STRIPPED			0x0200
+#define IMAGE_FILE_EXECUTABLE_IMAGE			0x0002
+#define IMAGE_FILE_LINE_NUMS_STRIPPED			0x0004
+
+/* Optional Header Standard Fields (Image Only) */
+#define PE_OPT_HDR_MAGIC_PE32PLUS			0x020b
+#define IMAGE_SUBSYSTEM_EFI_APPLICATION			10
+
+#define IMAGE_SCN_MEM_SHARED				0x10000000
+#define IMAGE_SCN_MEM_EXECUTE				0x20000000
+#define IMAGE_SCN_MEM_READ				0x40000000
+#define IMAGE_SCN_MEM_WRITE				0x80000000
+#define IMAGE_SCN_CNT_CODE				0x00000020
+#define IMAGE_SCN_CNT_INITIALIZED_DATA			0x00000040
+#define IMAGE_SCN_CNT_UNINITIALIZED_DATA		0x00000080
+#define IMAGE_SCN_ALIGN_1BYTES				0x00100000
+#define IMAGE_SCN_ALIGN_4096BYTES			0x00d00000
+#define IMAGE_SCN_MEM_DISCARDABLE			0x02000000
+
+#define IMAGE_DLL_CHARACTERISTICS_NX_COMPAT             0x0100
+
+#endif /* __PLAT_CMN_FAKE_PE_H__ */
