@@ -115,6 +115,16 @@ config MAX_UK_RELOC_SYMS
 
 endif
 
+config MAX_BOOTINFO_MRD_COUNT
+	int "Maximum amount of Bootinfo Memory Region Descriptors"
+	default 128
+	help
+		The number of memory region descriptors depends on the platform. Some
+		may have less than 100, while others may have 100's of memory region
+		descriptors. In order to cope with this, the user is able to configure
+		the amount of statically allocated space in the image made available
+		for storing memory region descriptors' metadata.
+
 choice
 	prompt "Debug information level"
 	default DEBUG_SYMBOLS_LVL3
