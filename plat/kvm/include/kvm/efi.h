@@ -25,6 +25,8 @@ typedef void *uk_efi_event_t;
 typedef __paddr_t uk_efi_paddr_t;
 typedef __vaddr_t uk_efi_vaddr_t;
 
+uk_efi_status_t uk_efi_jmp_to_kern();
+
 typedef struct uk_efi_guid {
 	__u32 b0_3;
 	__u16 b4_5;
