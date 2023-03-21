@@ -46,6 +46,8 @@ SECTIONS
 	_text = .;
 	.text :
 	{
+		KEEP(*(.pe_header))
+		. = ALIGN(0x1000);
 		/* prevent linker gc from removing multiboot header */
 		KEEP (*(.data.boot))
 		KEEP (*(.data.boot.*))
