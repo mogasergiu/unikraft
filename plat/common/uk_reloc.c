@@ -8,6 +8,9 @@
 
 #include <uk/plat/memory.h>
 
+static __u8 __section(".uk_reloc") __used
+uk_reloc_sec[UKPLAT_UK_RELOC_SIZE];
+
 void __used do_uk_reloc(__paddr_t r_paddr, __vaddr_t r_vaddr)
 {
 	struct ukplat_memregion_desc *mrdp;
