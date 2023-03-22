@@ -49,6 +49,16 @@ struct uk_reloc_hdr {
 	struct uk_reloc urs[];
 } __packed __align(__SIZEOF_LONG__);
 
+/* CONFIG_MAX_UK_RELOC_SYMS symbolizes the amount of present relocations
+ * whose existence was forced through one of the present macros (i.e. ur_pte,
+ * ur_mov, ur_data, etc.) instead of the already existing ones generated inside
+ * the .rela.dyn ELF section. The default is 32 but this can be changed through
+ * the configuration menu if CONFIG_OPTIMIZE_PIE is enabled of course.
+ */
+#define UKPLAT_UK_RELOC_SIZE						\
+	(sizeof(struct uk_reloc_hdr) +					\
+	CONFIG_MAX_UK_RELOC_SYMS * sizeof(struct uk_reloc))
+
 /* Misaligned access here is never going to happen for a non-x86 architecture
  * as there are no uk_reloc_imm relocation types defined for them.
  * We need this for x86 to patch early boot code, so it's a false positive.
