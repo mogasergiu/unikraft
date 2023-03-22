@@ -216,7 +216,8 @@ def uk_reloc_sym_to_struct(elf, uk_reloc_sym):
 # See include/uk/plat/common/uk_reloc.h.
 def build_uk_relocs(elf, rela_dyn_secs, max_m_off):
     uk_relocs = [rela_to_uk_reloc(r) for r in rela_dyn_secs]
-    uk_reloc_syms = get_nm_syms(elf, get_uk_reloc_sym_exp(r'data'))
+    uk_reloc_syms = get_nm_syms(elf, get_uk_reloc_sym_exp(r'imm'))
+    uk_reloc_syms += get_nm_syms(elf, get_uk_reloc_sym_exp(r'data'))
 
     # Also gather all of the PTE uk_reloc's for use against relocatable
     # PTE's.
