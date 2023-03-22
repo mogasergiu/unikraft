@@ -6,6 +6,12 @@
 #define UK_RELOC_SIGNATURE		0xBADB0111
 #define UK_RELOC_ALIGNMENT		0x1000
 
+#if defined(__ARM_64__)
+#include <arm/arm64/uk_reloc.h>
+#else
+#error "For relocation support, add uk_reloc.h for current architecture."
+#endif
+
 #ifdef __ASSEMBLY__
 
 .macro ur_sec_updt
