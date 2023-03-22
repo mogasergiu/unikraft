@@ -28,6 +28,11 @@
 #endif
 .endm
 
+#ifndef CONFIG_OPTIMIZE_PIE
+do_uk_reloc:
+	ret
+#endif
+
 #else  /* __ASSEMBLY__ */
 
 #include <uk/arch/types.h>
@@ -83,6 +88,8 @@ apply_uk_reloc(struct uk_reloc *ur, __u64 val, void *baddr)
 		break;
 	}
 }
+
+void do_uk_reloc(__paddr_t r_paddr, __vaddr_t r_vaddr);
 
 #endif /* !__ASSEMBLY__ */
 
