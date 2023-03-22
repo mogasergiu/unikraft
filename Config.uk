@@ -95,11 +95,25 @@ config OPTIMIZE_LTO
 		will increase overall building time but creates more efficient
 		Unikraft binaries.
 
-config OPTIMIZE_PIE
+menuconfig OPTIMIZE_PIE
 	bool "Build the Unikernel as a static PIE"
 	depends on !PLAT_LINUXU
 	help
 		Build the Unikernel as a static PIE.
+
+if OPTIMIZE_PIE
+
+config MAX_UK_RELOC_SYMS
+	int "Maximum amount of forced relocations generated through uk_reloc macro's"
+	default 32
+	help
+		In cases where the programmer wants to force the existence of a certain
+		type of relocation which is otherwise non-compliant with the current
+		format of the final image, one can use one of the given uk_reloc macro's
+		that generate symbols to be processed by mkukreloc.py. The script will
+		generate in the .uk_reloc section all of such desired relocations.
+
+endif
 
 choice
 	prompt "Debug information level"
