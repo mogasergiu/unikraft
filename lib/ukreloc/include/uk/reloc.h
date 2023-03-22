@@ -28,6 +28,11 @@
 #endif
 .endm
 
+#ifndef CONFIG_OPTIMIZE_PIE
+do_ukreloc:
+	ret
+#endif
+
 #else  /* __ASSEMBLY__ */
 
 #include <uk/arch/types.h>
@@ -82,6 +87,8 @@ apply_ukreloc(struct ukreloc *ur, __u64 val, void *baddr)
 		break;
 	}
 }
+
+void do_ukreloc(__paddr_t r_paddr, __vaddr_t r_vaddr);
 
 #endif /* !__ASSEMBLY__ */
 
