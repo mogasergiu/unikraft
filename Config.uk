@@ -122,6 +122,12 @@ menuconfig UK_EFI_STUB
 		required to be able to enter a valid initial state of the
 		platform.
 
+if UK_EFI_STUB
+config UK_EFI_STUB_CMDLINE_FNAME
+	string "Name of the command line arguments file"
+	default "$(UK_NAME).cmdl"
+endif
+
 choice
 	prompt "Debug information level"
 	default DEBUG_SYMBOLS_LVL3
