@@ -6,6 +6,7 @@
  * size. Usually, 2 to 4 is enough, but allocate 10, just in case. We do not
  * care afterwards anyway.
  */
+#define UK_EFI_MAXPATHLEN					4096
 #define UK_EFI_SURPLUS_MEM_DESC_COUNT				10
 #define uk_efi_crash(str)					ukplat_crash()
 
@@ -45,6 +46,35 @@ uk_efi_boot_services_t *uk_efi_bs;
 uk_efi_hndl_t uk_efi_sh;
 
 static uk_efi_uintn_t uk_efi_map_key;
+
+static inline __sz ascii_to_utf16(const char *str, char *str16)
+{
+	__sz i = 0;
+
+	while (str[i >> 1]) {
+		str16[i] = str[i >> 1];
+		str16[i + 1] = '\0';
+		i += 2;
+	}
+
+	str16[i] = str16[i + 1] = '\0';
+
+	return i + 2;
+}
+
+static inline __sz utf16_to_ascii(const char *str16, char *str)
+{
+	__sz i = 0;
+
+	while (*str16) {
+		str[i++] = *str16;
+		str16 += 2;
+	}
+
+	str[i] = '\0';
+
+	return i + 1;
+}
 
 static inline void uk_efi_cls()
 {
@@ -237,6 +267,131 @@ static void uk_efi_setup_bootinfo_mrds(struct ukplat_bootinfo *const bi)
 	ukplat_memregion_list_coalesce(&bi->mrds);
 }
 
+static uk_efi_ld_img_hndl_t* uk_efi_get_uk_img_hndl()
+{
+	static uk_efi_ld_img_hndl_t *uk_img_hndl;
+	uk_efi_status_t status;
+
+	if (uk_img_hndl)
+		return uk_img_hndl;
+
+	status = uk_efi_bs->handle_protocol(uk_efi_sh,
+					    UK_EFI_LOADED_IMAGE_PROTOCOL_GUID,
+					    (void **)&uk_img_hndl);
+	if (status != UK_EFI_SUCCESS)
+		uk_efi_crash("Failed to handle loaded image protocol\n");
+
+	return uk_img_hndl;
+}
+
+static void uk_efi_read_file(uk_efi_hndl_t dev_h, const char *const file_name,
+			     char **buf, __sz *len)
+{
+	uk_efi_file_prot_t *volume, *file_hndl;
+	__s16 file_name16[UK_EFI_MAXPATHLEN];
+	uk_efi_simple_fs_prot_t *sfs_prot;
+	uk_efi_file_info_id_t *file_info;
+	__sz len16, file_info_len;
+	uk_efi_status_t status;
+
+	status = uk_efi_bs->handle_protocol(dev_h,
+					    UK_EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID,
+					    &sfs_prot);
+	if (status != UK_EFI_SUCCESS)
+		uk_efi_crash("Failed to handle Simple Filesystem Protocol.");
+
+	status = sfs_prot->open_volume(sfs_prot, &volume);
+	if (status != UK_EFI_SUCCESS)
+		uk_efi_crash("Failed to open Volume.");
+
+	len16 = ascii_to_utf16(file_name, (char *)file_name16);
+	if (len16 > UK_EFI_MAXPATHLEN)
+		uk_efi_crash("File path too long.");
+
+	status = volume->open(volume, &file_hndl, file_name16,
+			      UK_EFI_FILE_MODE_READ,
+			      UK_EFI_FILE_READ_ONLY | UK_EFI_FILE_HIDDEN);
+	if (status != UK_EFI_SUCCESS)
+		uk_efi_crash("Failed to open file.");
+
+	file_info_len = 0;
+	file_info = NULL;
+	status = file_hndl->get_info(file_hndl, UK_EFI_FILE_INFO_ID_GUID,
+				     &file_info_len, file_info);
+	if (status != UK_EFI_BUFFER_TOO_SMALL)
+		uk_efi_crash("Dummy call to get_info failed.");
+
+	status = uk_efi_bs->allocate_pool(UK_EFI_LOADER_DATA, file_info_len,
+					  (void **)&file_info);
+	if (status != UK_EFI_SUCCESS)
+		uk_efi_crash("Failed to allocate memory for file_info\n");
+
+	status = file_hndl->get_info(file_hndl, UK_EFI_FILE_INFO_ID_GUID,
+				     &file_info_len, file_info);
+	if (status != UK_EFI_SUCCESS)
+		uk_efi_crash("Failed to get file_info.");
+
+	*len = file_info->file_size;
+	status = uk_efi_bs->allocate_pool(UK_EFI_LOADER_DATA, *len + 1,
+					  (void **)buf);
+	if (status != UK_EFI_SUCCESS)
+		uk_efi_crash("Failed to allocate memory for file contents\n");
+
+	status = file_hndl->read(file_hndl, len, *buf);
+	if (status != UK_EFI_SUCCESS)
+		uk_efi_crash("Failed to read file.");
+
+	status = uk_efi_bs->free_pool(file_info);
+	if (status != UK_EFI_SUCCESS)
+		uk_efi_crash("Failed to free file_info.");
+
+	(*buf)[*len] = '\0';
+}
+
+static void uk_efi_setup_bootinfo_cmdl(struct ukplat_bootinfo *const bi)
+{
+	struct ukplat_memregion_desc mrd = {0};
+	uk_efi_ld_img_hndl_t *uk_img_hndl;
+	uk_efi_status_t status;
+	char *cmdl;
+	__sz len;
+
+	uk_img_hndl = uk_efi_get_uk_img_hndl();
+
+	/* We can either have the command line provided by the user when this
+	 * very specific instance of the image was launched, in which case this
+	 * one takes priority, or we can have it provided through
+	 * CONFIG_UK_EFI_STUB_CMDLINE_PATH as a path on the same device.
+	 */
+	if (uk_img_hndl->load_options && uk_img_hndl->load_options_size) {
+		len = (uk_img_hndl->load_options_size >> 1) + 1;
+
+		status = uk_efi_bs->allocate_pool(UK_EFI_LOADER_DATA, len,
+						  (void **)&cmdl);
+		if (status != UK_EFI_SUCCESS)
+			uk_efi_crash("Failed to allocate memory for cmdl\n");
+
+		/* Update  actual size */
+		len = utf16_to_ascii(uk_img_hndl->load_options, cmdl);
+	} else {
+		if (sizeof(CONFIG_UK_EFI_STUB_CMDLINE_FNAME) <= 1)
+			return;
+
+		uk_efi_read_file(uk_img_hndl->device_handle,
+				 "\\EFI\\BOOT\\"CONFIG_UK_EFI_STUB_CMDLINE_FNAME,
+				 &cmdl, &len);
+	}
+
+	mrd.pbase = (__paddr_t) cmdl;
+	mrd.vbase = (__vaddr_t) cmdl;
+	mrd.len = len;
+	mrd.type = UKPLAT_MEMRT_CMDLINE;
+	mrd.flags = UKPLAT_MEMRF_READ | UKPLAT_MEMRF_MAP;
+	ukplat_memregion_list_insert(&bi->mrds,  &mrd);
+
+	bi->cmdline = (__u64)cmdl;
+}
+
 static void uk_efi_setup_bootinfo()
 {
 	struct ukplat_bootinfo *bi;
@@ -246,6 +401,8 @@ static void uk_efi_setup_bootinfo()
 	bi = ukplat_bootinfo_get();
 	if (unlikely(!bi))
 		uk_efi_crash("Failed to get bootinfo\n");
+
+	uk_efi_setup_bootinfo_cmdl(bi);
 
 	uk_efi_bs->copy_mem(bi->bootloader, bl, sizeof(bl));
 
