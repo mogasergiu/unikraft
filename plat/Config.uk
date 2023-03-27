@@ -41,6 +41,17 @@ config UKPLAT_LCPU_WAKEUP_IRQ
 
 endmenu
 
+menuconfig EFI_STUB
+	bool "Make the final Unikernel image a valid UEFI application"
+	default n
+	help
+		Prepend a fake, architecture specific, PE header to the
+		final image, patched by mkefi.py. The new entry point
+		will be architecture specific initial stub, followed by
+		an architecture generic EFI stub that sets up everything
+		required to be able to enter a valid initial state of the
+		platform.
+
 menuconfig PAGING
 	bool "Virtual memory API"
 	default n
