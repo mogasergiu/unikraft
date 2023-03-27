@@ -112,6 +112,17 @@ config MAX_BOOTINFO_MRD_COUNT
 		the amount of statically allocated space in the image made available
 		for storing memory region descriptors' metadata.
 
+menuconfig UK_EFI_STUB
+	bool "Turn the final Unikernel image into a UEFI application"
+	default n
+	help
+		Prepend a fake, architecture specific, PE header to the
+		final image, patched by mkefi.py. The new entry point
+		will be architecture specific initial stub, followed by
+		an architecture generic EFI stub that sets up everything
+		required to be able to enter a valid initial state of the
+		platform.
+
 choice
 	prompt "Debug information level"
 	default DEBUG_SYMBOLS_LVL3

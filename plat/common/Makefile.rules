@@ -14,3 +14,8 @@ define build_bootinfo =
 		$(SCRIPTS_DIR)/mkbootinfo.py $(1) $(1).bootinfo $(BINFO_FLAGS) && \
 		$(OBJCOPY) $(1) --update-section .uk_bootinfo=$(1).bootinfo)
 endef
+
+define build_efi =
+	$(call build_cmd,EFI,,$(1).efi,\
+		$(SCRIPTS_DIR)/mkefi.py $(1))
+endef
