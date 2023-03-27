@@ -9,3 +9,8 @@ define build_ukreloc =
 		$(OBJCOPY) --update-section .uk_reloc=$(1).uk_reloc.bin $(1) 2>&1 | \
 		{ grep -v "section.*lma.*adjusted to.*" || true; })
 endef
+
+define build_efi =
+	$(call build_cmd,EFI,,$(1).efi,\
+		$(SCRIPTS_DIR)/mkefi.py $(1))
+endef
