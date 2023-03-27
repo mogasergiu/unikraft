@@ -45,13 +45,13 @@ extern "C" {
 /* Memory region types */
 #define UKPLAT_MEMRT_ANY		0xffff
 
-#define UKPLAT_MEMRT_FREE		0x0001	/* Uninitialized memory */
-#define UKPLAT_MEMRT_RESERVED		0x0002	/* In use by platform */
-#define UKPLAT_MEMRT_KERNEL		0x0004	/* Kernel binary segment */
-#define UKPLAT_MEMRT_INITRD		0x0008	/* Initramdisk */
-#define UKPLAT_MEMRT_CMDLINE		0x0010	/* Command line */
-#define UKPLAT_MEMRT_DEVICETREE		0x0020	/* Device tree */
-#define UKPLAT_MEMRT_STACK		0x0040	/* Thread stack */
+#define UKPLAT_MEMRT_FREE              0x0001  /* Uninitialized memory */
+#define UKPLAT_MEMRT_INITRD		0x0002	/* Initramdisk */
+#define UKPLAT_MEMRT_CMDLINE		0x0004	/* Command line */
+#define UKPLAT_MEMRT_STACK		0x0008	/* Thread stack */
+#define UKPLAT_MEMRT_DEVICETREE		0x0010	/* Device tree */
+#define UKPLAT_MEMRT_KERNEL		0x0020	/* Kernel binary segment */
+#define UKPLAT_MEMRT_RESERVED		0x0040	/* In use by platform */
 
 /* Memory region flags */
 #define UKPLAT_MEMRF_ALL		0xffff

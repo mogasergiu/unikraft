@@ -13,7 +13,7 @@ SECINFO_EXP = r'^\s+\d+\s+.uk_bootinfo\s+([0-9,a-f]+)'
 PHDRS_EXP = r'^\s+LOAD.+vaddr\s(0x[0-9,a-f]+).+\n.+memsz\s(0x[0-9,a-f]+)\sflags\s([rwx|-]{3})$'
 
 # Memory region types (see include/uk/plat/memory.h)
-UKPLAT_MEMRT_KERNEL     = 0x0004   # Kernel binary segment
+UKPLAT_MEMRT_KERNEL     = 0x0020   # Kernel binary segment
 
 # Memory region flags (see include/uk/plat/memory.h)
 UKPLAT_MEMRF_READ       = 0x0001   # Region is readable
