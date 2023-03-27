@@ -16,6 +16,20 @@ uk_efi_hndl_t uk_efi_sh;
 
 static uk_efi_uintn_t uk_efi_map_key;
 
+static inline __sz utf16_to_ascii(char *str16, char *str)
+{
+	__sz i = 0;
+
+	while (*str16) {
+		str[i++] = *str16;
+		str16 += 2;
+	}
+
+	str[i] = '\0';
+
+	return ++i;
+}
+
 static inline void uk_efi_cls()
 {
 	uk_efi_st->con_out->clear_screen(uk_efi_st->con_out);
@@ -314,6 +328,37 @@ static void uk_efi_setup_bootinfo_mrds(struct ukplat_bootinfo *const bi)
 	uk_efi_coalesce_bi_mrds(&bi->mrds);
 }
 
+static void uk_efi_setup_bootinfo_cmdl(struct ukplat_bootinfo *const bi)
+{
+	struct ukplat_memregion_desc mrd = {0};
+	uk_efi_ld_img_hndl_t *uk_img_hndl;
+	uk_efi_status_t status;
+	char tmp_cmdl[256], *cmdl;
+	__sz len;
+
+	status = uk_efi_bs->handle_protocol(uk_efi_sh,
+					    UK_EFI_LOADED_IMAGE_PROTOCOL_GUID,
+					    (void **)&uk_img_hndl);
+	if (status != UK_EFI_SUCCESS)
+		uk_efi_crash("Failed to handle loaded image protocol\n");
+
+	len = utf16_to_ascii(uk_img_hndl->load_options, tmp_cmdl);
+	status = uk_efi_bs->allocate_pool(UK_EFI_LOADER_DATA, len,
+					  (void **)&cmdl);
+	if (status != UK_EFI_SUCCESS)
+		uk_efi_crash("Failed to allocate memory for cmdl argument\n");
+
+	uk_efi_bs->copy_mem(cmdl, tmp_cmdl, len);
+	mrd.pbase = (__paddr_t) cmdl;
+	mrd.vbase = (__vaddr_t) cmdl;
+	mrd.len = len;
+	mrd.type = UKPLAT_MEMRT_CMDLINE;
+	mrd.flags = UKPLAT_MEMRF_READ | UKPLAT_MEMRF_MAP;
+	ukplat_memregion_list_insert(&bi->mrds,  &mrd);
+
+	bi->cmdline = (__u64)cmdl;
+}
+
 static void uk_efi_setup_bootinfo()
 {
 	struct ukplat_bootinfo *bi;
@@ -323,6 +368,8 @@ static void uk_efi_setup_bootinfo()
 	bi = ukplat_bootinfo_get();
 	if (unlikely(!bi))
 		uk_efi_crash("Failed to get bootinfo\n");
+
+	uk_efi_setup_bootinfo_cmdl(bi);
 
 	uk_efi_bs->copy_mem(bi->bootloader, bl, sizeof(bl));
 
