@@ -495,6 +495,30 @@ static void uk_efi_setup_initrd()
 	ukplat_memregion_list_insert(&ukplat_bootinfo_get()->mrds,  &mrd);
 }
 
+static void uk_efi_setup_dtb()
+{
+	struct ukplat_memregion_desc mrd = {0};
+	uk_efi_ld_img_hndl_t *uk_img_hndl;
+	char *dtb;
+	__sz len;
+
+	if (sizeof(CONFIG_UK_EFI_STUB_DTB_FNAME) <= 1)
+		return;
+
+	uk_img_hndl = uk_efi_get_uk_img_hndl();
+
+	uk_efi_read_file(uk_img_hndl->device_handle,
+			 "\\EFI\\BOOT\\"CONFIG_UK_EFI_STUB_DTB_FNAME,
+			 &dtb, &len);
+
+	mrd.pbase = (__paddr_t) dtb;
+	mrd.vbase = (__vaddr_t) dtb;
+	mrd.len = len;
+	mrd.type = UKPLAT_MEMRT_DEVICETREE;
+	mrd.flags = UKPLAT_MEMRF_READ | UKPLAT_MEMRF_MAP;
+	ukplat_memregion_list_insert(&ukplat_bootinfo_get()->mrds,  &mrd);
+}
+
 static void uk_efi_setup_bootinfo()
 {
 	struct ukplat_bootinfo *bi;
@@ -512,6 +536,8 @@ static void uk_efi_setup_bootinfo()
 	uk_efi_bs->copy_mem(bi->bootprotocol, bp, sizeof(bp));
 
 	uk_efi_setup_initrd();
+
+	uk_efi_setup_dtb();
 
 	uk_efi_setup_bootinfo_mrds(bi);
 }
