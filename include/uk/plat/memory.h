@@ -183,6 +183,20 @@ ukplat_memregion_find_next(int i, __u32 type, __u32 flags, __u32 fmask,
 	ukplat_memregion_find_next(-1, UKPLAT_MEMRT_INITRD, 0, 0, mrd)
 
 /**
+ * Searches for the first devicetree module.
+ *
+ * @param[out] mrd
+ *   Pointer to memory region descriptor that will be updated on success
+ *
+ * @return
+ *   On success, returns the region number of the first devicetree module. A
+ *   return value < 0 means that there is no devicetree module.
+ */
+#define ukplat_memregion_find_dtb0(mrd) \
+	ukplat_memregion_find_next(-1, UKPLAT_MEMRT_DEVICETREE, 0, 0, mrd)
+
+
+/**
  * Sets the platform memory allocator and triggers the platform memory mappings
  * for which an allocator is needed.
  *

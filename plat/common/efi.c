@@ -354,7 +354,6 @@ static void uk_efi_coalesce_bi_mrds(struct ukplat_memregion_list *const mrds)
 			   ml_prio == mr_prio && ml->flags == mr->flags) {
 			ml->len += mr->len;
 			ukplat_memregion_list_delete(mrds, i + 1);
-			i++;
 		} else {
 			i++;
 		}
@@ -574,7 +573,7 @@ static void uk_efi_setup_bootinfo_cmdl(struct ukplat_bootinfo *const bi)
 	bi->cmdline = (__u64)cmdl;
 }
 
-static void uk_efi_setup_initrd()
+static void uk_efi_setup_bootinfo_initrd(struct ukplat_bootinfo *const bi)
 {
 	struct ukplat_memregion_desc mrd = {0};
 	uk_efi_ld_img_hndl_t *uk_img_hndl;
@@ -595,14 +594,15 @@ static void uk_efi_setup_initrd()
 	mrd.len = len;
 	mrd.type = UKPLAT_MEMRT_INITRD;
 	mrd.flags = UKPLAT_MEMRF_READ | UKPLAT_MEMRF_MAP;
-	ukplat_memregion_list_insert(&ukplat_bootinfo_get()->mrds,  &mrd);
+	ukplat_memregion_list_insert(&bi->mrds,  &mrd);
 }
 
-static void uk_efi_setup_dtb()
+static void uk_efi_setup_bootinfo_dtb(struct ukplat_bootinfo *const bi)
 {
 	struct ukplat_memregion_desc mrd = {0};
 	uk_efi_ld_img_hndl_t *uk_img_hndl;
-	char *dtb;
+	int fdt_chosen_off, fdt_rc;
+	char *dtb, *cmdl;
 	__sz len;
 
 	if (sizeof(CONFIG_UK_EFI_STUB_DTB_FNAME) <= 1)
@@ -614,12 +614,24 @@ static void uk_efi_setup_dtb()
 			 "\\EFI\\BOOT\\"CONFIG_UK_EFI_STUB_DTB_FNAME,
 			 &dtb, &len);
 
+	cmdl = (char *)bi->cmdline;
+	if (cmdl) {
+		fdt_chosen_off = fdt_path_offset(dtb, "/chosen");
+		if (fdt_chosen_off < 0)
+			uk_efi_crash("Failed to offset to /chosen\n");
+
+		fdt_rc = fdt_appendprop(dtb, fdt_chosen_off, "bootargs",
+					cmdl, strlen(cmdl) + 1);
+		if (fdt_rc)
+			uk_efi_crash("Failed to set bootargs\n");
+	}
+
 	mrd.pbase = (__paddr_t) dtb;
 	mrd.vbase = (__vaddr_t) dtb;
 	mrd.len = len;
 	mrd.type = UKPLAT_MEMRT_DEVICETREE;
 	mrd.flags = UKPLAT_MEMRF_READ | UKPLAT_MEMRF_MAP;
-	ukplat_memregion_list_insert(&ukplat_bootinfo_get()->mrds,  &mrd);
+	ukplat_memregion_list_insert(&bi->mrds,  &mrd);
 }
 
 static void uk_efi_setup_bootinfo()
@@ -638,9 +650,9 @@ static void uk_efi_setup_bootinfo()
 
 	uk_efi_bs->copy_mem(bi->bootprotocol, bp, sizeof(bp));
 
-	uk_efi_setup_initrd();
+	uk_efi_setup_bootinfo_initrd(bi);
 
-	uk_efi_setup_dtb();
+	uk_efi_setup_bootinfo_dtb(bi);
 
 	uk_efi_setup_bootinfo_mrds(bi);
 }

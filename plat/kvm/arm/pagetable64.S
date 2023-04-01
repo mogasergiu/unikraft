@@ -68,7 +68,7 @@ ENTRY(start_mmu)
 #else /* CONFIG_PAGING */
 	/* Get VIRT_BITS from id_aa64mmfr0_el1.PARange */
 	mrs x3, id_aa64mmfr0_el1
-	ldr x5, =tcr_ips_bits
+	ur_ldr x5, tcr_ips_bits
 	ubfx x4, x3, #0, #4
 	ldrb w4, [x5, x4]
 
