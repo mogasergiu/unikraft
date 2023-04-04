@@ -63,8 +63,9 @@ void ukplat_bootinfo_print(void)
 			   (*bi->bootloader) ? bi->bootloader : "unknown",
 			   (*bi->bootprotocol) ? bi->bootprotocol : "unknown");
 
-	if (bi->cmdline)
-		uk_pr_info("Command line: %s\n", (const char *)bi->cmdline);
+	mrd = ukplat_memregion_get_cmdl();
+	if (mrd)
+		uk_pr_info("Command line: %s\n", (const char *)mrd->vbase);
 
 	uk_pr_info("Boot memory map:\n");
 	for (i = 0; i < bi->mrds.count; i++) {

@@ -20,12 +20,13 @@
  */
 #include <uk/config.h>
 #include <libfdt.h>
+#include <uk/arch/paging.h>
 #include <uk/plat/common/sections.h>
+#include <uk/plat/common/bootinfo.h>
 #include <uart/pl011.h>
 #ifdef CONFIG_RTC_PL031
 #include <rtc/pl031.h>
 #endif /* CONFIG_RTC_PL031 */
-#include <kvm/config.h>
 #include <uk/assert.h>
 #include <kvm/intctrl.h>
 #include <arm/cpu.h>
@@ -49,10 +50,10 @@
 struct uk_pagetable kernel_pt;
 #endif /* CONFIG_PAGING */
 
-struct kvmplat_config _libkvmplat_cfg = { 0 };
+const unsigned long max_addr = 0x8000000000;  /* 512 GiB */
 
-#define MAX_CMDLINE_SIZE 1024
-static char cmdline[MAX_CMDLINE_SIZE];
+void *bootmemory_palloc(__sz size, int type, __u16 flags);
+
 static const char *appname = CONFIG_UK_NAME;
 
 smccc_conduit_fn_t smccc_psci_call;
@@ -68,11 +69,23 @@ static void _init_dtb(void *dtb_pointer)
 	if ((ret = fdt_check_header(dtb_pointer)))
 		UK_CRASH("Invalid DTB: %s\n", fdt_strerror(ret));
 
-	_libkvmplat_cfg.dtb = dtb_pointer;
+	ret = ukplat_memregion_list_insert(&ukplat_bootinfo_get()->mrds,
+	        &(struct ukplat_memregion_desc){
+			.vbase = (__vaddr_t)dtb_pointer,
+			.pbase = (__vaddr_t)dtb_pointer,
+			.len   = fdt_totalsize(dtb_pointer),
+			.type  = UKPLAT_MEMRT_DEVICETREE,
+			.flags = UKPLAT_MEMRF_READ | UKPLAT_MEMRF_MAP,
+		});
+	if (unlikely(ret < 0))
+		UK_CRASH("Could not insert DT memory descriptor");
+
+	ukplat_bootinfo_get()->flags |= UKPLAT_BOOTINFO_HAVE_DEVICETREE;
+
 	uk_pr_info("Found device tree on: %p\n", dtb_pointer);
 }
 
-static void _dtb_get_psci_method(void)
+static void _dtb_get_psci_method(void *dtb_pointer)
 {
 	int fdtpsci, len;
 	const char *fdtmethod;
@@ -81,10 +94,9 @@ static void _dtb_get_psci_method(void)
 	 * We just support PSCI-0.2 and PSCI-1.0, the PSCI-0.1 would not
 	 * be supported.
 	 */
-	fdtpsci = fdt_node_offset_by_compatible(_libkvmplat_cfg.dtb,
-						-1, "arm,psci-1.0");
+	fdtpsci = fdt_node_offset_by_compatible(dtb_pointer, -1, "arm,psci-1.0");
 	if (fdtpsci < 0)
-		fdtpsci = fdt_node_offset_by_compatible(_libkvmplat_cfg.dtb,
+		fdtpsci = fdt_node_offset_by_compatible(dtb_pointer,
 							-1, "arm,psci-0.2");
 
 	if (fdtpsci < 0) {
@@ -92,7 +104,7 @@ static void _dtb_get_psci_method(void)
 		goto enomethod;
 	}
 
-	fdtmethod = fdt_getprop(_libkvmplat_cfg.dtb, fdtpsci, "method", &len);
+	fdtmethod = fdt_getprop(dtb_pointer, fdtpsci, "method", &len);
 	if (!fdtmethod || (len <= 0)) {
 		uk_pr_info("No PSCI method found\n");
 		goto enomethod;
@@ -115,18 +127,18 @@ enomethod:
 	smccc_psci_call = NULL;
 }
 
-static void _init_dtb_mem(void)
+static void _init_dtb_mem(void *dtb_pointer)
 {
 	int fdt_mem, prop_len = 0, prop_min_len;
-	int naddr, nsize;
+	int naddr, nsize, rc;
 	const uint64_t *regs;
-	uint64_t mem_base, mem_size, max_addr;
+	uint64_t mem_base, mem_size;
 
 	/* search for assigned VM memory in DTB */
-	if (fdt_num_mem_rsv(_libkvmplat_cfg.dtb) != 0)
+	if (fdt_num_mem_rsv(dtb_pointer) != 0)
 		uk_pr_warn("Reserved memory is not supported\n");
 
-	fdt_mem = fdt_node_offset_by_prop_value(_libkvmplat_cfg.dtb, -1,
+	fdt_mem = fdt_node_offset_by_prop_value(dtb_pointer, -1,
 						"device_type",
 						"memory", sizeof("memory"));
 	if (fdt_mem < 0) {
@@ -134,11 +146,11 @@ static void _init_dtb_mem(void)
 		return;
 	}
 
-	naddr = fdt_address_cells(_libkvmplat_cfg.dtb, fdt_mem);
+	naddr = fdt_address_cells(dtb_pointer, fdt_mem);
 	if (naddr < 0 || naddr >= FDT_MAX_NCELLS)
 		UK_CRASH("Could not find proper address cells!\n");
 
-	nsize = fdt_size_cells(_libkvmplat_cfg.dtb, fdt_mem);
+	nsize = fdt_size_cells(dtb_pointer, fdt_mem);
 	if (nsize < 0 || nsize >= FDT_MAX_NCELLS)
 		UK_CRASH("Could not find proper size cells!\n");
 
@@ -146,7 +158,7 @@ static void _init_dtb_mem(void)
 	 * QEMU will always provide us at least one bank of memory.
 	 * unikraft will use the first bank for the time-being.
 	 */
-	regs = fdt_getprop(_libkvmplat_cfg.dtb, fdt_mem, "reg", &prop_len);
+	regs = fdt_getprop(dtb_pointer, fdt_mem, "reg", &prop_len);
 
 	/*
 	 * The property must contain at least the start address
@@ -165,49 +177,67 @@ static void _init_dtb_mem(void)
 	if (mem_base > __TEXT)
 		UK_CRASH("Fatal: Image outside of RAM\n");
 
-	max_addr = mem_base + mem_size;
+        rc = ukplat_memregion_list_insert(&ukplat_bootinfo_get()->mrds,
+		&(struct ukplat_memregion_desc){
+			.vbase = (__vaddr_t)mem_base,
+			.pbase = (__paddr_t)mem_base,
+			.len   = mem_size,
+			.type  = UKPLAT_MEMRT_FREE,
+			.flags = UKPLAT_MEMRF_READ |
+                                 UKPLAT_MEMRF_WRITE,
+		});
+	if (unlikely(rc < 0))
+		UK_CRASH("Could not add free memory descriptor\n");
 
-	/* AArch64 require stack be 16-bytes alignment by default */
-	_libkvmplat_cfg.bstack.end   = ALIGN_DOWN(max_addr,
-						  __STACK_ALIGN_SIZE);
-	_libkvmplat_cfg.bstack.len   = ALIGN_UP(__STACK_SIZE,
-						__STACK_ALIGN_SIZE);
-	_libkvmplat_cfg.bstack.start = _libkvmplat_cfg.bstack.end
-				       - _libkvmplat_cfg.bstack.len;
-
-	_libkvmplat_cfg.heap.start = ALIGN_DOWN((uintptr_t)__END, __PAGE_SIZE);
-	_libkvmplat_cfg.heap.end   = _libkvmplat_cfg.bstack.start;
-	_libkvmplat_cfg.heap.len   = _libkvmplat_cfg.heap.end
-				     - _libkvmplat_cfg.heap.start;
-
-	if (_libkvmplat_cfg.heap.start > _libkvmplat_cfg.heap.end)
-		UK_CRASH("Not enough memory, giving up...\n");
+        ukplat_memregion_coalesce_mrds();
 }
 
-static void _dtb_get_cmdline(char *cmdline, size_t maxlen)
+static char *cmdline;
+static __sz cmdline_len;
+
+static void _dtb_get_cmdline(void *dtb_pointer)
 {
+	struct ukplat_memregion_desc *cmdl_mrd;
 	int fdtchosen, len;
 	const char *fdtcmdline;
 
 	/* TODO: Proper error handling */
-	fdtchosen = fdt_path_offset(_libkvmplat_cfg.dtb, "/chosen");
+	fdtchosen = fdt_path_offset(dtb_pointer, "/chosen");
 	if (!fdtchosen)
 		goto enocmdl;
-	fdtcmdline = fdt_getprop(_libkvmplat_cfg.dtb, fdtchosen, "bootargs",
+	fdtcmdline = fdt_getprop(dtb_pointer, fdtchosen, "bootargs",
 				 &len);
 	if (!fdtcmdline || (len <= 0))
 		goto enocmdl;
 
-	if (likely(maxlen >= (unsigned int)len))
-		maxlen = len;
-	else
-		uk_pr_err("Command line too long, truncated\n");
+        cmdline = bootmemory_palloc(len, UKPLAT_MEMRT_CMDLINE,
+				    UKPLAT_MEMRF_READ);
+	if (unlikely(!cmdline))
+		UK_CRASH("Command-line alloc failed\n");
 
-	strncpy(cmdline, fdtcmdline, maxlen);
+	/* Ensure it has been added properly and cache it */
+	cmdl_mrd = ukplat_memregion_get_cmdl();
+	if (!cmdl_mrd)
+		UK_CRASH("Command-line memory region descriptor failed "
+			 "to get added");
+
+	strncpy(cmdline, fdtcmdline, len);
 	/* ensure null termination */
-	cmdline[maxlen - 1] = '\0';
+	cmdline[len - 1] = '\0';
+
+	/* Tag this scratch cmdline as a kernel resource, to distinguish it
+	 * from the original cmdline obtained above
+	 */
+	cmdline = bootmemory_palloc(cmdl_mrd->len, UKPLAT_MEMRT_KERNEL,
+				    UKPLAT_MEMRF_READ);
+	if (unlikely(!cmdline))
+		UK_CRASH("Could not allocate scratch command-line memory");
+
+	strncpy(cmdline, (const char *)cmdl_mrd->vbase, cmdl_mrd->len);
+	cmdline_len = cmdl_mrd->len;
 
 	uk_pr_info("Command line: %s\n", cmdline);
+
 	return;
 
 enocmdl:
@@ -222,15 +252,19 @@ int _init_paging(void)
 	uint64_t start;
 	uint64_t len;
 	unsigned long frames;
-	unsigned long attr;
 	__sz free_memory, res_memory;
+        void *pt_base, *bstack;
+        struct ukplat_memregion_descriptor *mrd;
+
+        rc = ukplat_memregion_find_next(-1, UKPLAT_MEMRT_FREE, 0, 0, &mrd);
+        if (unlikely(rc < 0))
+                return rc;
 
 	/* Assign all available memory beyond the boot stack
 	 * to the frame allocator.
 	 */
-	start = ALIGN_UP(__END + __STACK_SIZE, PAGE_SIZE);
-	len   = _libkvmplat_cfg.bstack.end - start;
-
+	start = ALIGN_UP(mrd->pbase, PAGE_SIZE);
+	len   = mrd->pbase + mrd->len - start;
 	rc = ukplat_pt_init(&kernel_pt, start, len);
 	if (unlikely(rc))
 		return rc;
@@ -250,35 +284,30 @@ int _init_paging(void)
 	 * by the frame allocator for new mappings. Assume the worst
 	 * case, that is page size.
 	 */
-	free_memory = len;
-	frames = free_memory >> PAGE_SHIFT;
+        res_memory = PT_PAGES(len >> PAGE_SHIFT) << PAGE_SHIFT;
+        pt_base = bootmemory_pallloc(PT_PAGES(len >> PAGE_SHIFT) << PAGE_SHIFT,
+                                     UKPLAT_MEMRT_RESERVED, UKPLAT_MEMRF_READ);
+	if (unlikely(!pt_base))
+		UK_CRASH("Page tables alloc failed\n");
 
-	res_memory = _libkvmplat_cfg.bstack.len;	/* boot stack */
-	res_memory += PT_PAGES(frames) << PAGE_SHIFT;	/* page tables */
+        rc = ukplat_memregion_find_next(-1, UKPLAT_MEMRT_STACK, 0, 0, &mrd)
+        if (unlikely(rc < 0))
+                UK_CRASH("No available heap memory");
 
-	/* Map the heap after the boot stack */
-	_libkvmplat_cfg.heap.start = start;
-	_libkvmplat_cfg.heap.end   = _libkvmplat_cfg.heap.start +
-				     free_memory - res_memory;
-
-	_libkvmplat_cfg.heap.len   = _libkvmplat_cfg.heap.end -
-				     _libkvmplat_cfg.heap.start;
-
-	frames = _libkvmplat_cfg.heap.len >> PAGE_SHIFT;
-	attr = PAGE_ATTR_PROT_RW | PAGE_ATTR_TYPE_NORMAL_WB_TAGGED;
-	rc = ukplat_page_map(&kernel_pt, _libkvmplat_cfg.heap.start,
-			     __PADDR_ANY, frames, attr, 0);
+	frames = mrd->len >> PAGE_SHIFT;
+        rc = ukplat_page_map(&kernel_pt, bstack, __PADDR_ANY, frames,
+                             PAGE_ATTR_PROT_RW, 0);
 	if (unlikely(rc))
 		return rc;
 
-	/* Map the stack right after the heap */
-	_libkvmplat_cfg.bstack.start = _libkvmplat_cfg.heap.end;
-	_libkvmplat_cfg.bstack.end   = _libkvmplat_cfg.heap.end +
-				       _libkvmplat_cfg.bstack.len;
+        rc = ukplat_memregion_find_next(-1, UKPLAT_MEMRT_FREE, 0, 0, &mrd)
+        if (unlikely(rc < 0))
+                UK_CRASH("No available heap memory");
 
-	frames = _libkvmplat_cfg.bstack.len >> PAGE_SHIFT;
-	rc = ukplat_page_map(&kernel_pt, _libkvmplat_cfg.bstack.start,
-			     __PADDR_ANY, frames, PAGE_ATTR_PROT_RW, 0);
+        frames = mrd->len >> PAGE_SHIFT;
+	rc = ukplat_page_map(&kernel_pt, mrd->vbase, __PADDR_ANY, frames,
+                             PAGE_ATTR_PROT_RW | PAGE_ATTR_TYPE_NORMAL_WB_TAGGED,
+                             0);
 	if (unlikely(rc))
 		return rc;
 
@@ -288,6 +317,8 @@ int _init_paging(void)
 
 void __no_pauth _libkvmplat_start(void *dtb_pointer)
 {
+        struct ukplat_memregion_desc *mrd;
+	void *bstack;
 	int ret;
 
 	_init_dtb(dtb_pointer);
@@ -296,14 +327,21 @@ void __no_pauth _libkvmplat_start(void *dtb_pointer)
 
 	uk_pr_info("Entering from KVM (arm64)...\n");
 
+        /* Initialize memory from DTB */
+	_init_dtb_mem(dtb_pointer);
+
+        /* Allocate boot stack */
+        bstack = bootmemory_palloc(__STACK_SIZE, UKPLAT_MEMRT_STACK,
+				   UKPLAT_MEMRF_READ | UKPLAT_MEMRF_WRITE);
+	if (unlikely(!bstack))
+		UK_CRASH("Boot stack alloc failed\n");
+	bstack = (void *)((__uptr)bstack + __STACK_SIZE);
+
 	/* Get command line from DTB */
-	_dtb_get_cmdline(cmdline, sizeof(cmdline));
+	_dtb_get_cmdline(dtb_pointer);
 
 	/* Get PSCI method from DTB */
-	_dtb_get_psci_method();
-
-	/* Initialize memory from DTB */
-	_init_dtb_mem();
+	_dtb_get_psci_method(dtb_pointer);
 
 #ifdef CONFIG_PAGING
 	/* Initialize paging */
@@ -343,24 +381,24 @@ void __no_pauth _libkvmplat_start(void *dtb_pointer)
 #ifdef CONFIG_HAVE_SMP
 	ret = lcpu_mp_init(CONFIG_UKPLAT_LCPU_RUN_IRQ,
 			   CONFIG_UKPLAT_LCPU_WAKEUP_IRQ,
-			   _libkvmplat_cfg.dtb);
+			   dtb_pointer);
 	if (unlikely(ret))
 		UK_CRASH("SMP initialization failed: %d.\n", ret);
 #endif /* CONFIG_HAVE_SMP */
-
-	uk_pr_info("     heap start: %p\n",
-		   (void *) _libkvmplat_cfg.heap.start);
-	uk_pr_info("      stack top: %p\n",
-		   (void *) _libkvmplat_cfg.bstack.start);
 
 	/*
 	 * Switch away from the bootstrap stack as early as possible.
 	 */
 	uk_pr_info("Switch from bootstrap stack to stack @%p\n",
-		   (void *) _libkvmplat_cfg.bstack.end);
+		   (void *) bstack);
 
-	_libkvmplat_newstack(_libkvmplat_cfg.bstack.end);
+	_libkvmplat_newstack(bstack);
+
+	mrd = ukplat_memregion_get_cmdl();
+	if (!mrd)
+		UK_CRASH("Command-line memory region descriptor failed to get "
+			 "added");
 
 	ukplat_entry_argp(DECONST(char *, appname),
-			  (char *)cmdline, strlen(cmdline));
+			  (char *)mrd->vbase, mrd->len);
 }

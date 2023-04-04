@@ -206,22 +206,42 @@ static int mem_init(struct ukplat_bootinfo *bi)
 static char *cmdline;
 static __sz cmdline_len;
 
-static inline int cmdline_init(struct ukplat_bootinfo *bi)
+static inline int cmdline_init()
 {
-	char *cmdl = (bi->cmdline) ? (char *)bi->cmdline : CONFIG_UK_NAME;
+	struct ukplat_memregion_desc *cmdl_mrd;
 
-	cmdline_len = strlen(cmdl) + 1;
+	cmdl_mrd = ukplat_memregion_get_cmdl();
+	if (!cmdl_mrd) {
+		cmdline = bootmemory_palloc(sizeof(CONFIG_UK_NAME),
+					    UKPLAT_MEMRT_CMDLINE,
+					    UKPLAT_MEMRF_READ);
+		if (unlikely(!cmdline))
+			return -ENOMEM;
 
-	cmdline = bootmemory_palloc(cmdline_len, UKPLAT_MEMRT_CMDLINE);
+		/* Ensure it has been added properly and cache it */
+		cmdl_mrd = ukplat_memregion_get_cmdl();
+		if (!cmdl_mrd)
+			UK_CRASH("Command-line memory region descriptor failed "
+				 "to get added");
+	}
+
+	/* Tag this scratch cmdline as a kernel resource, to distinguish it
+	 * from the original cmdline obtained above
+	 */
+	cmdline = bootmemory_palloc(cmdl_mrd->len, UKPLAT_MEMRT_KERNEL,
+				    UKPLAT_MEMRF_READ | UKPLAT_MEMRF_WRITE);
 	if (unlikely(!cmdline))
 		return -ENOMEM;
 
-	strncpy(cmdline, cmdl, cmdline_len);
+	strncpy(cmdline, (const char *)cmdl_mrd->vbase, cmdl_mrd->len);
+	cmdline_len = cmdl_mrd->len;
+
 	return 0;
 }
 
 static void __noreturn _ukplat_entry2(void)
 {
+
 	ukplat_entry_argp(NULL, cmdline, cmdline_len);
 
 	ukplat_lcpu_halt();
@@ -246,12 +266,13 @@ void _ukplat_entry(struct lcpu *lcpu, struct ukplat_bootinfo *bi)
 	intctrl_init();
 
 	/* Initialize command line */
-	rc = cmdline_init(bi);
+	rc = cmdline_init();
 	if (unlikely(rc))
 		UK_CRASH("Cmdline init failed: %d\n", rc);
 
 	/* Allocate boot stack */
-	bstack = bootmemory_palloc(__STACK_SIZE, UKPLAT_MEMRT_STACK);
+	bstack = bootmemory_palloc(__STACK_SIZE, UKPLAT_MEMRT_STACK,
+				   UKPLAT_MEMRF_READ | UKPLAT_MEMRF_WRITE);
 	if (unlikely(!bstack))
 		UK_CRASH("Boot stack alloc failed\n");
 

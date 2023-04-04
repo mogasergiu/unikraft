@@ -90,7 +90,7 @@ def main():
         secobj.write(b'\0' * 3) # _pad0
         secobj.write(b'\0' * 16) # bootloader
         secobj.write(b'\0' * 16) # bootprotocol
-        secobj.write(b'\0' * 8) # cmdline
+        secobj.write(b'\0' * 8) # flags
         secobj.write(cap.to_bytes(4, endianness)) # mrds.capacity
         secobj.write(b'\0' * 4) # mrds.count
 
