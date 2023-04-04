@@ -7,6 +7,7 @@
 #ifndef __PLAT_CMN_BOOTINFO_H__
 #define __PLAT_CMN_BOOTINFO_H__
 
+#include <stdbool.h>
 #include <uk/arch/types.h>
 #include <uk/arch/limits.h>
 #include <uk/plat/common/memory.h>
@@ -28,8 +29,10 @@ struct ukplat_bootinfo {
 	/** Null-terminated boot protocol identifier */
 	char bootprotocol[16];
 
-	/** Address of null-terminated kernel command line */
-	__u64 cmdline;
+	/** Flags indicating available resources */
+#define UKPLAT_BOOTINFO_HAVE_INITRD		(1 << 0)
+#define UKPLAT_BOOTINFO_HAVE_DEVICETREE		(1 << 1)
+	__u64 flags;
 
 	/**
 	 * List of memory regions. Must be the last member as the
@@ -76,5 +79,15 @@ void ukplat_bootinfo_set(struct ukplat_bootinfo *bi);
  * Prints the boot information to the kernel console using informational level
  */
 void ukplat_bootinfo_print(void);
+
+static inline bool ukplat_bootinfo_have_initrd()
+{
+	return ukplat_bootinfo_get()->flags & UKPLAT_BOOTINFO_HAVE_INITRD;
+}
+
+static inline bool ukplat_bootinfo_have_devicetree()
+{
+	return ukplat_bootinfo_get()->flags & UKPLAT_BOOTINFO_HAVE_DEVICETREE;
+}
 
 #endif /* __PLAT_CMN_BOOTINFO_H__ */
