@@ -91,3 +91,18 @@ struct ukplat_memregion_desc *ukplat_memregion_get_dtb()
 	return dtb;
 
 }
+
+struct ukplat_memregion_desc *ukplat_memregion_get_cmdl()
+{
+	static struct ukplat_memregion_desc *cmdl;
+	int rc;
+
+	if (cmdl)
+		return cmdl;
+
+	rc = ukplat_memregion_find_next(-1, UKPLAT_MEMRT_CMDLINE, 0, 0, &cmdl);
+	if (unlikely(rc < 0))
+		return NULL;
+
+	return cmdl;
+}

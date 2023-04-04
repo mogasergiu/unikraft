@@ -188,6 +188,15 @@ struct ukplat_memregion_desc *ukplat_memregion_get_initrd0();
 struct ukplat_memregion_desc *ukplat_memregion_get_dtb();
 
 /**
+ * Gets the commandline.
+ *
+ * @return
+ *   On success, returns the memory region descriptor of the commandline.
+ *   A return value of 0 means that there is no initrd module.
+ */
+struct ukplat_memregion_desc *ukplat_memregion_get_cmdl();
+
+/**
  * Sets the platform memory allocator and triggers the platform memory mappings
  * for which an allocator is needed.
  *
