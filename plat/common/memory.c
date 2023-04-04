@@ -32,6 +32,7 @@
 
 #include <uk/plat/memory.h>
 #include <uk/plat/common/memory.h>
+#include <uk/plat/common/bootinfo.h>
 #include <uk/alloc.h>
 #include <stddef.h>
 
@@ -54,4 +55,21 @@ int ukplat_memallocator_set(struct uk_alloc *a)
 struct uk_alloc *ukplat_memallocator_get(void)
 {
 	return plat_allocator;
+}
+
+struct ukplat_memregion_desc *ukplat_memregion_get_initrd0()
+{
+	static struct ukplat_memregion_desc *initrd0;
+	int rc;
+
+	/* Avoid unnecessary lookup for something that does not exist */
+	if (initrd0 || !ukplat_bootinfo_have_initrd())
+		return initrd0;
+
+	rc = ukplat_memregion_find_next(-1, UKPLAT_MEMRT_INITRD, 0, 0, &initrd0);
+	if (unlikely(rc < 0))
+		return NULL;
+
+	return initrd0;
+
 }
