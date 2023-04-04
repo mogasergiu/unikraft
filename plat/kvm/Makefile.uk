@@ -119,6 +119,7 @@ LIBKVMPLAT_SRCS-y                          += $(LIBKVMPLAT_BASE)/io.c
 LIBKVMPLAT_SRCS-y                          += $(LIBKVMPLAT_BASE)/memory.c
 LIBKVMPLAT_SRCS-y                          += $(UK_PLAT_COMMON_BASE)/lcpu.c|common
 LIBKVMPLAT_SRCS-y                          += $(UK_PLAT_COMMON_BASE)/memory.c|common
+LIBKVMPLAT_SRCS-y                          += $(UK_PLAT_COMMON_BASE)/bootpalloc.c|common
 LIBKVMPLAT_SRCS-y                          += $(UK_PLAT_COMMON_BASE)/bootinfo.c|common
 LIBKVMPLAT_SRCS-y                          += $(UK_PLAT_COMMON_BASE)/bootinfo.lds.S|common
 LIBKVMPLAT_SRCS-$(CONFIG_OPTIMIZE_PIE)     += $(UK_PLAT_COMMON_BASE)/uk_reloc.c|common
