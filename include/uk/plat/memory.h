@@ -212,6 +212,8 @@ int ukplat_memallocator_set(struct uk_alloc *a);
  */
 struct uk_alloc *ukplat_memallocator_get(void);
 
+int ukplat_memregion_coalesce_mrds(void);
+
 #ifdef __cplusplus
 }
 #endif
