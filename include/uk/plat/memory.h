@@ -179,6 +179,15 @@ ukplat_memregion_find_next(int i, __u32 type, __u32 flags, __u32 fmask,
 struct ukplat_memregion_desc *ukplat_memregion_get_initrd0();
 
 /**
+ * Gets the devicetree blob module.
+ *
+ * @return
+ *   On success, returns the memory region descriptor of the devicetree
+ *   blob module. A return value of 0 means that there is no initrd module.
+ */
+struct ukplat_memregion_desc *ukplat_memregion_get_dtb();
+
+/**
  * Sets the platform memory allocator and triggers the platform memory mappings
  * for which an allocator is needed.
  *

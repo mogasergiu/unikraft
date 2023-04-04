@@ -73,3 +73,21 @@ struct ukplat_memregion_desc *ukplat_memregion_get_initrd0()
 	return initrd0;
 
 }
+
+struct ukplat_memregion_desc *ukplat_memregion_get_dtb()
+{
+	static struct ukplat_memregion_desc *dtb;
+	int rc;
+
+	/* Avoid unnecessary lookup for something that does not exist */
+	if (dtb || !ukplat_bootinfo_have_devicetree())
+		return dtb;
+
+	rc = ukplat_memregion_find_next(-1, UKPLAT_MEMRT_DEVICETREE,
+					0, 0, &dtb);
+	if (unlikely(rc < 0))
+		return NULL;
+
+	return dtb;
+
+}
