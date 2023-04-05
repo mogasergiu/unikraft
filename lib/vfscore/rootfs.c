@@ -90,7 +90,8 @@ static int vfscore_rootfs(void)
 		struct ukplat_memregion_desc *initrd;
 		enum ukcpio_error error;
 
-		if (ukplat_memregion_find_initrd0(&initrd) < 0) {
+		initrd = ukplat_bootinfo_get_initrd0();
+		if (!initrd) {
 			uk_pr_crit("Could not find an initrd!\n");
 			return -1;
 		}

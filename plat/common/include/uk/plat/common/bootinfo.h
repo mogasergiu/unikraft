@@ -34,6 +34,9 @@ struct ukplat_bootinfo {
 	/** Pointer to the memory region of the devicetree blob */
 	__u64 dtb_mrd;
 
+	/** Pointer to the memory region of the first initrd module */
+	__u64 initrd0_mrd;
+
 	/**
 	 * List of memory regions. Must be the last member as the
 	 * memory regions directly follow this boot information structure
@@ -41,7 +44,7 @@ struct ukplat_bootinfo {
 	struct ukplat_memregion_list mrds;
 } __packed __align(__SIZEOF_LONG__);
 
-UK_CTASSERT(sizeof(struct ukplat_bootinfo) == 64);
+UK_CTASSERT(sizeof(struct ukplat_bootinfo) == 72);
 
 #ifdef CONFIG_UKPLAT_MEMRNAME
 #if __SIZEOF_LONG__ == 8
@@ -84,6 +87,11 @@ struct ukplat_memregion_desc *ukplat_bootinfo_get_cmdl();
  * Returns a pointer to the boot information's devicetree blob memory region
  */
 struct ukplat_memregion_desc *ukplat_bootinfo_get_dtb();
+
+/**
+ * Returns a pointer to the boot information's first initrd module memory region
+ */
+struct ukplat_memregion_desc *ukplat_bootinfo_get_initrd0_mrd();
 
 /**
  * Prints the boot information to the kernel console using informational level
