@@ -1,5 +1,11 @@
 #include <uk/plat/common/common.lds.h>
 
+PHDRS
+{
+	tls PT_TLS;
+	tls_load PT_LOAD;
+}
+
 SECTIONS
 {
 	EXCEPTION_SECTIONS
