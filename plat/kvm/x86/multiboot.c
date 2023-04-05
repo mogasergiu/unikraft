@@ -71,8 +71,6 @@ void multiboot_entry(struct lcpu *lcpu, struct multiboot_info *mi)
 			mrd.flags = UKPLAT_MEMRF_READ | UKPLAT_MEMRF_MAP;
 
 			mrd_insert(bi, &mrd);
-
-			bi->cmdline = mi->cmdline;
 		}
 	}
 

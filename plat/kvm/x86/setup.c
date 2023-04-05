@@ -286,17 +286,40 @@ static int mem_init(struct ukplat_bootinfo *bi)
 static char *cmdline;
 static __sz cmdline_len;
 
-static inline int cmdline_init(struct ukplat_bootinfo *bi)
+static inline int cmdline_init()
 {
-	char *cmdl = (bi->cmdline) ? (char *)bi->cmdline : CONFIG_UK_NAME;
+	struct ukplat_memregion_desc *cmdl_mrd;
 
-	cmdline_len = strlen(cmdl) + 1;
+	/* Get the command-line memory region descriptor. If it does not
+	 * exist, allocate a memory region descriptor for it, holding the
+	 * default value, that of CONFIG_UK_NAME
+	 */
+	cmdl_mrd = ukplat_bootinfo_get_cmdl();
+	if (!cmdl_mrd) {
+		cmdline = bootmemory_palloc(sizeof(CONFIG_UK_NAME),
+					    UKPLAT_MEMRT_CMDLINE);
+		if (unlikely(!cmdline))
+			return -ENOMEM;
 
+		/* Now make the call again to cache it. If an error occurs,
+		 * something is wrong with the memory regions and we should
+		 * crash the application.
+		 */
+		cmdl_mrd = ukplat_bootinfo_get_cmdl();
+		if (unlikely(!cmdl_mrd))
+			UK_CRASH("Failed to get command-line memory region");
+	}
+
+	cmdline_len = cmdl_mrd->len;
+
+	/* Now allocate the scratch command-line that will be thrashed to
+	 * build argc/argv.
+	 */
 	cmdline = bootmemory_palloc(cmdline_len, UKPLAT_MEMRT_CMDLINE);
 	if (unlikely(!cmdline))
 		return -ENOMEM;
 
-	strncpy(cmdline, cmdl, cmdline_len);
+	strncpy(cmdline, (const char *)cmdl_mrd->vbase, cmdline_len);
 	return 0;
 }
 
@@ -326,7 +349,7 @@ void _ukplat_entry(struct lcpu *lcpu, struct ukplat_bootinfo *bi)
 	intctrl_init();
 
 	/* Initialize command line */
-	rc = cmdline_init(bi);
+	rc = cmdline_init();
 	if (unlikely(rc))
 		UK_CRASH("Cmdline init failed: %d\n", rc);
 

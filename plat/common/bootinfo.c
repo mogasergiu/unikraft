@@ -44,6 +44,23 @@ void ukplat_bootinfo_set(struct ukplat_bootinfo *bi)
 	bi_bootinfo = bi;
 }
 
+struct ukplat_memregion_desc *ukplat_bootinfo_get_cmdl()
+{
+	struct ukplat_bootinfo *bi = ukplat_bootinfo_get();
+	struct ukplat_memregion_desc *cmdl_mrd = NULL;
+
+	UK_ASSERT(bi);
+
+	if (!bi->cmdl_mrd) {
+		ukplat_memregion_find_next(-1, UKPLAT_MEMRT_CMDLINE,
+					   0, 0, &cmdl_mrd);
+
+		bi->cmdl_mrd = (__u64)cmdl_mrd;
+	}
+
+	return (struct ukplat_memregion_desc *)bi->cmdl_mrd;
+}
+
 void ukplat_bootinfo_print(void)
 {
 	struct ukplat_bootinfo *bi = ukplat_bootinfo_get();
@@ -63,8 +80,9 @@ void ukplat_bootinfo_print(void)
 			   (*bi->bootloader) ? bi->bootloader : "unknown",
 			   (*bi->bootprotocol) ? bi->bootprotocol : "unknown");
 
-	if (bi->cmdline)
-		uk_pr_info("Command line: %s\n", (const char *)bi->cmdline);
+	if (bi->cmdl_mrd)
+		uk_pr_info("Command line: %s\n",
+			   (const char *)ukplat_bootinfo_get_cmdl()->vbase);
 
 	uk_pr_info("Boot memory map:\n");
 	for (i = 0; i < bi->mrds.count; i++) {
