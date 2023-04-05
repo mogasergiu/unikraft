@@ -28,8 +28,8 @@ struct ukplat_bootinfo {
 	/** Null-terminated boot protocol identifier */
 	char bootprotocol[16];
 
-	/** Address of null-terminated kernel command line */
-	__u64 cmdline;
+	/** Pointer to the memory region of the command-line */
+	__u64 cmdl_mrd;
 
 	/**
 	 * List of memory regions. Must be the last member as the
@@ -71,6 +71,11 @@ struct ukplat_bootinfo *ukplat_bootinfo_get(void);
  *   must remain accessible after the call.
  */
 void ukplat_bootinfo_set(struct ukplat_bootinfo *bi);
+
+/**
+ * Returns a pointer to the boot information's command-line memory region
+ */
+struct ukplat_memregion_desc *ukplat_bootinfo_get_cmdl();
 
 /**
  * Prints the boot information to the kernel console using informational level
