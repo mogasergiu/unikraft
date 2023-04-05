@@ -61,6 +61,23 @@ struct ukplat_memregion_desc *ukplat_bootinfo_get_cmdl()
 	return (struct ukplat_memregion_desc *)bi->cmdl_mrd;
 }
 
+struct ukplat_memregion_desc *ukplat_bootinfo_get_dtb()
+{
+	struct ukplat_bootinfo *bi = ukplat_bootinfo_get();
+	struct ukplat_memregion_desc *dtb_mrd = NULL;
+
+	UK_ASSERT(bi);
+
+	if (!bi->dtb_mrd) {
+		ukplat_memregion_find_next(-1, UKPLAT_MEMRT_DEVICETREE,
+					   0, 0, &dtb_mrd);
+
+		bi->dtb_mrd = (__u64)dtb_mrd;
+	}
+
+	return (struct ukplat_memregion_desc *)bi->dtb_mrd;
+}
+
 void ukplat_bootinfo_print(void)
 {
 	struct ukplat_bootinfo *bi = ukplat_bootinfo_get();
