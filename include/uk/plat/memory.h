@@ -170,19 +170,6 @@ ukplat_memregion_find_next(int i, __u32 type, __u32 flags, __u32 fmask,
 						  type, flags, fmask, mrd))
 
 /**
- * Searches for the first initrd module.
- *
- * @param[out] mrd
- *   Pointer to memory region descriptor that will be updated on success
- *
- * @return
- *   On success, returns the region number of the first initrd module. A
- *   return value < 0 means that there is no initrd module.
- */
-#define ukplat_memregion_find_initrd0(mrd) \
-	ukplat_memregion_find_next(-1, UKPLAT_MEMRT_INITRD, 0, 0, mrd)
-
-/**
  * Sets the platform memory allocator and triggers the platform memory mappings
  * for which an allocator is needed.
  *
