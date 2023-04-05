@@ -31,6 +31,9 @@ struct ukplat_bootinfo {
 	/** Address of null-terminated kernel command line */
 	__u64 cmdline;
 
+	/** Address of the devicetree blob */
+	__u64 dtb;
+
 	/**
 	 * List of memory regions. Must be the last member as the
 	 * memory regions directly follow this boot information structure
@@ -38,7 +41,7 @@ struct ukplat_bootinfo {
 	struct ukplat_memregion_list mrds;
 } __packed __align(__SIZEOF_LONG__);
 
-UK_CTASSERT(sizeof(struct ukplat_bootinfo) == 56);
+UK_CTASSERT(sizeof(struct ukplat_bootinfo) == 64);
 
 #ifdef CONFIG_UKPLAT_MEMRNAME
 #if __SIZEOF_LONG__ == 8
