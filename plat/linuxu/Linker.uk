@@ -22,6 +22,7 @@ $(LINUXU_DEBUG_IMAGE): $(LINUXU_ALIBS) $(LINUXU_ALIBS-y) \
 		     -Wl$(comma)--end-group \
 		     $(LINUXU_LD_SCRIPT_FLAGS) \
 		     -o $@)
+	$(call build_bootinfo,$@)
 
 $(LINUXU_IMAGE): $(LINUXU_IMAGE).dbg
 	$(call build_cmd,SCSTRIP,,$@,\
