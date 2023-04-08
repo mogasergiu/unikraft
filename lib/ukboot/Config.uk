@@ -120,12 +120,11 @@ if LIBUKBOOT
 
 	config LIBUKBOOT_HEAP_BASE
 	hex "Heap base address"
-	default 0x400000000
+	default 0x400000000 if ARCH_X86_64
+	default 0x050000000 if ARCH_ARM_64
+	depends on PLAT_KVM
 	depends on HAVE_PAGING
 	depends on !LIBUKBOOT_NOALLOC
-	# TODO: This is temporary until all platforms/archs supporting paging
-	# have switched to not initialize the heap in the platform.
-	depends on (ARCH_X86_64 && PLAT_KVM)
 
 	choice LIBUKBOOT_INITSCHED
 	prompt "Initialize scheduler"

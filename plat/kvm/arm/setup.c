@@ -175,11 +175,19 @@ static int _init_dtb_mem(void *dtb_pointer)
 	if (mem_base > __TEXT)
 		UK_CRASH("Fatal: Image outside of RAM\n");
 
+	if (CONFIG_LIBUKBOOT_HEAP_BASE > mem_base + mem_size)
+		UK_CRASH("Fatal: Heap base outside of RAM\n");
+
         rc = ukplat_memregion_list_insert(&ukplat_bootinfo_get()->mrds,
 		&(struct ukplat_memregion_desc){
 			.vbase = (__vaddr_t)mem_base,
 			.pbase = (__paddr_t)mem_base,
+#ifdef CONFIG_LIBUKBOOT_HEAP_BASE
+			.len   = mem_size -
+				 (CONFIG_LIBUKBOOT_HEAP_BASE - mem_base),
+#else
 			.len   = mem_size,
+#endif
 			.type  = UKPLAT_MEMRT_FREE,
 			.flags = UKPLAT_MEMRF_READ |
                                  UKPLAT_MEMRF_WRITE,
