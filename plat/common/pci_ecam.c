@@ -36,8 +36,8 @@
 #include <uk/list.h>
 #include <uk/alloc.h>
 #include <uk/print.h>
-#include <kvm/config.h>
 #include <uk/plat/common/cpu.h>
+#include <uk/plat/common/bootinfo.h>
 #include <libfdt_env.h>
 #include <ofw/fdt.h>
 #include <libfdt.h>
@@ -66,7 +66,8 @@ struct pci_range {
 	__u32 flags;
 };
 
-#define fdt_start (_libkvmplat_cfg.dtb)
+
+#define get_fdt() (void *)ukplat_bootinfo_get_dtb()->vbase
 
 static int gen_pci_fdt; // start offset of pci-ecam in fdt
 /*
@@ -165,9 +166,9 @@ static int gen_pci_parser_range(struct pci_range_parser *parser, int offset)
 	const int na = 3, ns = 2;
 	int rlen;
 
-	parser->pna = fdt_address_cells(fdt_start, offset);
+	parser->pna = fdt_address_cells(get_fdt(), offset);
 	parser->np = parser->pna + na + ns;
-	parser->range = fdt_getprop(fdt_start, offset, "ranges", &rlen);
+	parser->range = fdt_getprop(get_fdt(), offset, "ranges", &rlen);
 	if (parser->range == NULL)
 		return -ENOENT;
 
@@ -190,7 +191,7 @@ struct pci_range *pci_range_parser_one(struct pci_range_parser *parser,
 	range->pci_space = fdt32_to_cpu(*parser->range);
 	range->flags = pci_get_flags(parser->range);
 	range->pci_addr = fdt_reg_read_number(parser->range + 1, ns);
-	range->cpu_addr = fdt_translate_address_by_ranges(fdt_start, offset,
+	range->cpu_addr = fdt_translate_address_by_ranges(get_fdt(), offset,
 				parser->range + na);
 	range->size = fdt_reg_read_number(parser->range + parser->pna + na, ns);
 
@@ -241,10 +242,10 @@ int gen_pci_irq_parse(const fdt32_t *addr, struct fdt_phandle_args *out_irq)
 	 * is none, we are nice and just walk up the tree
 	 */
 	do {
-		prop = fdt_getprop(fdt_start, ipar, "#interrupt-cells", &plen);
+		prop = fdt_getprop(get_fdt(), ipar, "#interrupt-cells", &plen);
 		if (prop != NULL)
 			break;
-		ipar = irq_find_parent(fdt_start, ipar);
+		ipar = irq_find_parent(get_fdt(), ipar);
 	} while (ipar >= 0);
 
 	if (ipar < 0) {
@@ -263,8 +264,8 @@ int gen_pci_irq_parse(const fdt32_t *addr, struct fdt_phandle_args *out_irq)
 	 */
 	old = ipar;
 	do {
-		tmp = fdt_getprop(fdt_start, old, "#address-cells", NULL);
-		tnode = fdt_parent_offset(fdt_start, old);
+		tmp = fdt_getprop(get_fdt(), old, "#address-cells", NULL);
+		tnode = fdt_parent_offset(get_fdt(), old);
 		old = tnode;
 	} while (old >= 0 && tmp == NULL);
 
@@ -283,7 +284,7 @@ int gen_pci_irq_parse(const fdt32_t *addr, struct fdt_phandle_args *out_irq)
 		/* Now check if cursor is an interrupt-controller and if it is
 		 * then we are done
 		 */
-		if (fdt_prop_read_bool(fdt_start, ipar, "interrupt-controller")) {
+		if (fdt_prop_read_bool(get_fdt(), ipar, "interrupt-controller")) {
 			uk_pr_info(" -> got it !\n");
 			return 0;
 		}
@@ -298,17 +299,17 @@ int gen_pci_irq_parse(const fdt32_t *addr, struct fdt_phandle_args *out_irq)
 		}
 
 		/* Now look for an interrupt-map */
-		imap = fdt_getprop(fdt_start, ipar, "interrupt-map", &imaplen);
+		imap = fdt_getprop(get_fdt(), ipar, "interrupt-map", &imaplen);
 		/* No interrupt map, check for an interrupt parent */
 		if (imap == NULL) {
 			uk_pr_info(" -> no map, getting parent\n");
-			newpar = irq_find_parent(fdt_start, ipar);
+			newpar = irq_find_parent(get_fdt(), ipar);
 			goto skiplevel;
 		}
 		imaplen /= sizeof(__u32);
 
 		/* Look for a mask */
-		imask = fdt_getprop(fdt_start, ipar, "interrupt-map-mask", NULL);
+		imask = fdt_getprop(get_fdt(), ipar, "interrupt-map-mask", NULL);
 		if (!imask)
 			imask = dummy_imask;
 
@@ -323,7 +324,7 @@ int gen_pci_irq_parse(const fdt32_t *addr, struct fdt_phandle_args *out_irq)
 			uk_pr_info(" -> match=%d (imaplen=%d)\n", match, imaplen);
 
 			/* Get the interrupt parent */
-			newpar = fdt_node_offset_by_phandle(fdt_start, fdt32_to_cpu(*imap));
+			newpar = fdt_node_offset_by_phandle(get_fdt(), fdt32_to_cpu(*imap));
 			imap++;
 			--imaplen;
 
@@ -336,7 +337,7 @@ int gen_pci_irq_parse(const fdt32_t *addr, struct fdt_phandle_args *out_irq)
 			/* Get #interrupt-cells and #address-cells of new
 			 * parent
 			 */
-			prop = fdt_getprop(fdt_start, newpar, "#interrupt-cells",
+			prop = fdt_getprop(get_fdt(), newpar, "#interrupt-cells",
 						 &plen);
 			if (prop == NULL) {
 				uk_pr_info(" -> parent lacks #interrupt-cells!\n");
@@ -344,7 +345,7 @@ int gen_pci_irq_parse(const fdt32_t *addr, struct fdt_phandle_args *out_irq)
 			}
 			newintsize = fdt32_to_cpu(prop[0]);
 
-			prop = fdt_getprop(fdt_start, newpar, "#address-cells",
+			prop = fdt_getprop(get_fdt(), newpar, "#address-cells",
 						 &plen);
 			if (prop == NULL) {
 				uk_pr_info(" -> parent lacks #address-cells!\n");
@@ -407,20 +408,20 @@ static int gen_pci_probe(struct pf_device *pfdev __unused)
 	int err;
 
 	/* 1.Get the base and size of config space */
-	gen_pci_fdt = fdt_node_offset_by_compatible(fdt_start, -1,
+	gen_pci_fdt = fdt_node_offset_by_compatible(get_fdt(), -1,
 						gen_pci_match_table[0].compatible);
 	if (gen_pci_fdt < 0) {
 		uk_pr_info("Error in searching pci controller in fdt\n");
 		goto error_exit;
 	} else {
-		prop = fdt_getprop(fdt_start, gen_pci_fdt, "reg", &prop_len);
+		prop = fdt_getprop(get_fdt(), gen_pci_fdt, "reg", &prop_len);
 		if (!prop) {
 			uk_pr_err("reg of device not found in fdt\n");
 			goto error_exit;
 		}
 
 		/* Get the base addr and the size */
-		fdt_get_address(fdt_start, gen_pci_fdt, 0,
+		fdt_get_address(get_fdt(), gen_pci_fdt, 0,
 					&reg_base, &reg_size);
 		reg_base = fdt32_to_cpu(prop[0]);
 		reg_base = reg_base << 32 | fdt32_to_cpu(prop[1]);
@@ -434,7 +435,7 @@ static int gen_pci_probe(struct pf_device *pfdev __unused)
 				reg_base, reg_size);
 
 	/* 2.Get the bus range of pci controller */
-	prop = fdt_getprop(fdt_start, gen_pci_fdt, "bus-range", &prop_len);
+	prop = fdt_getprop(get_fdt(), gen_pci_fdt, "bus-range", &prop_len);
 	if (!prop) {
 		uk_pr_err("bus-range of device not found in fdt\n");
 		goto error_exit;
