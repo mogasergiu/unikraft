@@ -71,7 +71,7 @@ static inline bool is_in_static_pt(__paddr_t addr)
 	return addr < PLATFORM_MAX_MEM_ADDR;
 }
 
-void *ukplat_memregion_alloc(__sz size, int type)
+void *ukplat_memregion_alloc(__sz size, int type, __u16 flags)
 {
 	struct ukplat_memregion_desc *mrd, alloc_mrd = {0};
 	struct ukplat_bootinfo *bi;
@@ -103,9 +103,7 @@ void *ukplat_memregion_alloc(__sz size, int type)
 			mrd->vbase = pstart;
 			mrd->len = pend - pstart;
 			mrd->type = type;
-			mrd->flags = UKPLAT_MEMRF_READ |
-				     UKPLAT_MEMRF_WRITE |
-				     UKPLAT_MEMRF_MAP;
+			mrd->flags = flags | UKPLAT_MEMRF_MAP;
 
 			return (void *)pstart;
 		}
@@ -121,9 +119,7 @@ void *ukplat_memregion_alloc(__sz size, int type)
 		alloc_mrd.pbase = pstart;
 		alloc_mrd.len   = size;
 		alloc_mrd.type  = type;
-		alloc_mrd.flags = UKPLAT_MEMRF_READ  |
-				  UKPLAT_MEMRF_WRITE |
-				  UKPLAT_MEMRF_MAP;
+		alloc_mrd.flags = flags | UKPLAT_MEMRF_MAP;
 
 		bi = ukplat_bootinfo_get();
 		if (unlikely(!bi))
