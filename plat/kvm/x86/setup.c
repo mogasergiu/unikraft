@@ -215,7 +215,8 @@ static inline int cmdline_init()
 	cmdl_mrd = ukplat_bootinfo_get_cmdl();
 	if (!cmdl_mrd) {
 		cmdline = ukplat_memregion_alloc(sizeof(CONFIG_UK_NAME),
-				                 UKPLAT_MEMRT_CMDLINE);
+				                 UKPLAT_MEMRT_CMDLINE,
+						 UKPLAT_MEMRF_READ);
 		if (unlikely(!cmdline))
 			return -ENOMEM;
 
@@ -233,7 +234,8 @@ static inline int cmdline_init()
 	/* Now allocate the scratch command-line that will be thrashed to
 	 * build argc/argv.
 	 */
-	cmdline = ukplat_memregion_alloc(cmdline_len, UKPLAT_MEMRT_CMDLINE);
+	cmdline = ukplat_memregion_alloc(cmdline_len, UKPLAT_MEMRT_KERNEL,
+					 UKPLAT_MEMRF_READ | UKPLAT_MEMRF_WRITE);
 	if (unlikely(!cmdline))
 		return -ENOMEM;
 
@@ -272,7 +274,8 @@ void _ukplat_entry(struct lcpu *lcpu, struct ukplat_bootinfo *bi)
 		UK_CRASH("Cmdline init failed: %d\n", rc);
 
 	/* Allocate boot stack */
-	bstack = ukplat_memregion_alloc(__STACK_SIZE, UKPLAT_MEMRT_STACK);
+	bstack = ukplat_memregion_alloc(__STACK_SIZE, UKPLAT_MEMRT_STACK,
+					UKPLAT_MEMRF_READ | UKPLAT_MEMRF_WRITE);
 	if (unlikely(!bstack))
 		UK_CRASH("Boot stack alloc failed\n");
 
