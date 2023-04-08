@@ -446,6 +446,8 @@ __vaddr_t ukplat_page_kmap(struct uk_pagetable *pt, __paddr_t paddr,
 void ukplat_page_kunmap(struct uk_pagetable *pt, __vaddr_t vaddr,
 			unsigned long pages, unsigned long flags);
 
+int paging_init(void);
+
 #ifdef __cplusplus
 }
 #endif
