@@ -210,7 +210,11 @@ static inline int cmdline_init(struct ukplat_bootinfo *bi)
 
 	cmdline_len = strlen(cmdl) + 1;
 
-	cmdline = ukplat_memregion_alloc(cmdline_len, UKPLAT_MEMRT_CMDLINE);
+	/* This is not the original command-line, but one that will be thrashed
+	 * by `ukplat_entry_argp` to obtain argc/argv. So mark it as a kernel
+	 * resource instead.
+	 */
+	cmdline = ukplat_memregion_alloc(cmdline_len, UKPLAT_MEMRT_KERNEL);
 	if (unlikely(!cmdline))
 		return -ENOMEM;
 
