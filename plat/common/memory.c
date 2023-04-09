@@ -63,7 +63,7 @@ struct uk_alloc *ukplat_memallocator_get(void)
 #if defined(__X86_64__)
 #define PLATFORM_MAX_MEM_ADDR 0x00100000000 /* 4 GiB */
 #elif defined(__ARM_64__)
-#define PLATFORM_MAX_MEM_ADDR 0x10000000000 /* 512 GiB */
+#define PLATFORM_MAX_MEM_ADDR 0x00080000000 /* 2 GiB */
 #endif
 static inline bool is_in_static_pt(__paddr_t addr)
 {
