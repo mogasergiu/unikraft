@@ -29,6 +29,7 @@
 #endif /* CONFIG_HAVE_PAGING */
 
 #define PLATFORM_MAX_MEM_ADDR 0x100000000 /* 4 GiB */
+#define PLATFORM_MIN_MEM_ADDR 0x000100000 /* 1 MiB */
 
 #ifdef CONFIG_HAVE_PAGING
 /* Initial page table struct used for paging API to absorb statically defined
@@ -139,15 +140,27 @@ static int mem_init(struct ukplat_bootinfo *bi)
 	int rc;
 
 	/* TODO: Until we generate the boot page table at compile time, we
-	 * manually add an untyped unmap region to the boot info to force an
-	 * unmapping of the 1:1 mapping after the kernel image before mapping
-	 * only the necessary parts.
+	 * manually add two untyped unmap regions to the boot info to force an
+	 * unmapping of the 1:1 mapping after and before the kernel image
+         * before mapping only the necessary parts.
 	 */
 	rc = ukplat_memregion_list_insert(&bi->mrds,
 		&(struct ukplat_memregion_desc){
 			.vbase = PAGE_ALIGN_UP(__END),
 			.pbase = 0,
 			.len   = PLATFORM_MAX_MEM_ADDR - PAGE_ALIGN_UP(__END),
+			.type  = 0,
+			.flags = UKPLAT_MEMRF_UNMAP,
+		});
+	if (unlikely(rc < 0))
+		return rc;
+
+	rc = ukplat_memregion_list_insert(&bi->mrds,
+		&(struct ukplat_memregion_desc){
+			.vbase = PLATFORM_MIN_MEM_ADDR,
+			.pbase = 0,
+			.len   = PAGE_ALIGN_DOWN(__BASE_ADDR) -
+				 PLATFORM_MIN_MEM_ADDR,
 			.type  = 0,
 			.flags = UKPLAT_MEMRF_UNMAP,
 		});
