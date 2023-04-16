@@ -48,8 +48,6 @@
 #include <uk/plat/paging.h>
 #include <uk/plat/common/w_xor_x.h>
 #include <uk/falloc.h>
-
-struct uk_pagetable kernel_pt;
 #endif /* CONFIG_PAGING */
 
 smccc_conduit_fn_t smccc_psci_call;
@@ -199,6 +197,73 @@ static int _init_dtb_mem(void *dtb_pointer)
         return ukplat_memregion_list_coalesce(&ukplat_bootinfo_get()->mrds);
 }
 
+#ifdef CONFIG_PAGING
+#define DRAM_START					0x40000000
+#define DRAM_LEN					0x40000000
+static int mem_init()
+{
+	struct ukplat_memregion_desc *mrd;
+	int rc;
+
+	ukplat_memregion_foreach(&mrd, 0, 0, 0)
+		if (!IN_RANGE(mrd->pbase, DRAM_START, DRAM_LEN))
+			mrd->flags &= ~UKPLAT_MEMRF_MAP;
+
+	rc = ukplat_paging_init(ukplat_bootinfo_get());
+	if (unlikely(rc < 0))
+		return rc;
+
+#ifdef CONFIG_LIBUKBOOT_HEAP_BASE
+	rc = ukplat_page_unmap(ukplat_pt_get_active(),
+			       CONFIG_LIBUKBOOT_HEAP_BASE,
+			       ukplat_pt_get_active()->fa->free_memory >> PAGE_SHIFT,
+			     PAGE_FLAG_KEEP_PTES);
+	if (unlikely(rc))
+		return rc;
+#endif
+
+	return 0;
+}
+#else
+#define L0_PT0_START_PAGE				0x40000000
+#define L0_PT0_LEN					0x00200000
+extern __pte_t arm64_bpt_l0_pt0[];
+
+static int mem_init()
+{
+	struct ukplat_memregion_desc *mrd;
+	__paddr_t paddr, pstart, pend;
+	__pte_t pte_attr;
+	__sz len, idx;
+
+	ukplat_memregion_foreach(&mrd, 0, UKPLAT_MEMRF_MAP, UKPLAT_MEMRF_MAP) {
+		pstart = PAGE_ALIGN_UP(mrd->pbase);
+		len = PAGE_ALIGN_DOWN(mrd->len - (pstart - mrd->pbase));
+
+		if (unlikely(len == 0))
+			continue;
+
+		if (!RANGE_CONTAIN(L0_PT0_START_PAGE, L0_PT0_LEN, pstart, len))
+			continue;
+
+		if (mrd->flags & UKPLAT_MEMRF_WRITE)
+			pte_attr = PTE_ATTR_NORMAL_RW | PTE_TYPE_PAGE;
+		else if (mrd->flags & UKPLAT_MEMRF_EXECUTE)
+			pte_attr = PTE_ATTR_NORMAL_RX | PTE_TYPE_PAGE;
+		else
+			pte_attr = PTE_ATTR_NORMAL_RO | PTE_TYPE_PAGE;
+
+		pend = pstart + len;
+		for (paddr = pstart; paddr < pend; paddr += PAGE_SIZE) {
+			idx = (paddr - L0_PT0_START_PAGE) >> PAGE_SHIFT;
+			arm64_bpt_l0_pt0[idx] = paddr + pte_attr;
+		}
+	}
+
+	return 0;
+}
+#endif
+
 static char *cmdline;
 static __sz cmdline_len;
 
@@ -207,10 +272,14 @@ static void _dtb_get_cmdline(void *dtb_pointer)
 	int fdtchosen, len;
 	const char *fdtcmdline;
 
-	/* TODO: Proper error handling */
-	fdtchosen = fdt_path_offset(dtb_pointer, "/chosen");
-	if (!fdtchosen)
-		goto enocmdl;
+	if (ukplat_bootinfo_get()->cmdline) {
+		len = strlen((const char *)ukplat_bootinfo_get()->cmdline);
+		fdtcmdline = (const char *)ukplat_bootinfo_get()->cmdline;
+	} else {
+		/* TODO: Proper error handling */
+		fdtchosen = fdt_path_offset(dtb_pointer, "/chosen");
+		if (!fdtchosen)
+			goto enocmdl;
 	fdtcmdline = fdt_getprop(dtb_pointer, fdtchosen, "bootargs",
 				 &len);
 	if (!fdtcmdline || (len <= 0))
@@ -223,15 +292,15 @@ static void _dtb_get_cmdline(void *dtb_pointer)
 
 	/* Ensure it has been added properly and cache it */
 	ukplat_bootinfo_get()->cmdline = (__u64)cmdline;
-
 	strncpy(cmdline, fdtcmdline, len);
 	/* ensure null termination */
 	cmdline[len - 1] = '\0';
 
+	}
 	/* Tag this scratch cmdline as a kernel resource, to distinguish it
 	 * from the original cmdline obtained above
 	 */
-	cmdline = ukplat_memregion_alloc(len, UKPLAT_MEMRT_KERNEL,
+	cmdline = ukplat_memregion_alloc(len + 1, UKPLAT_MEMRT_KERNEL,
 					 UKPLAT_MEMRF_READ |
 					 UKPLAT_MEMRF_WRITE |
 					 UKPLAT_MEMRF_MAP);
@@ -250,85 +319,15 @@ enocmdl:
 }
 
 #ifdef CONFIG_PAGING
-
-int _init_paging(void)
-{
-	struct ukplat_memregion_desc *mrd;
-	__paddr_t paddr, pt;
-	__sz len, free_mem;
-	__vaddr_t vaddr;
-	int rc;
-
-	free_mem = 0;
-	ukplat_memregion_foreach(&mrd, UKPLAT_MEMRT_FREE, 0, 0) {
-		paddr  = PAGE_ALIGN_UP(mrd->pbase);
-		len    = PAGE_ALIGN_DOWN(mrd->len - (paddr - mrd->pbase));
-
-		mrd->pbase = paddr;
-		mrd->vbase = paddr;
-		mrd->len = len;
-		mrd->flags |= UKPLAT_MEMRF_UNMAP;
-
-		free_mem += len;
-	}
-
-	len = PT_PAGES(free_mem >> PAGE_SHIFT) << PAGE_SHIFT;
-	pt = (__paddr_t)ukplat_memregion_alloc(len, UKPLAT_MEMRT_RESERVED,
-					       UKPLAT_MEMRF_READ |
-					       UKPLAT_MEMRF_WRITE |
-					       UKPLAT_MEMRF_MAP);
-	if (!pt)
-		return -ENOMEM;
-
-	rc = ukplat_pt_init(&kernel_pt, pt, len);
-	if (unlikely(rc))
-		return rc;
-
-	/* Switch to the new page tables */
-	rc = ukplat_pt_set_active(&kernel_pt);
-	if (unlikely(rc))
-		return rc;
-
-	/* Unmap all available memory */
-	ukplat_memregion_foreach(&mrd, UKPLAT_MEMRT_FREE, 0, 0) {
-		UK_ASSERT(mrd->vbase != __U64_MAX);
-
-		vaddr = PAGE_ALIGN_DOWN(mrd->vbase);
-		len   = PAGE_ALIGN_UP(mrd->len + (mrd->vbase - vaddr));
-
-		rc = ukplat_page_unmap(&kernel_pt, vaddr, len >> PAGE_SHIFT,
-				       PAGE_FLAG_KEEP_FRAMES);
-		if (unlikely(rc))
-			return rc;
-
-		mrd->flags &= ~UKPLAT_MEMRF_UNMAP;
-		mrd->flags |= UKPLAT_MEMRF_MAP;
-	}
-
-	/* Perform mappings of the free memory only */
-	ukplat_memregion_foreach(&mrd, UKPLAT_MEMRT_FREE, 0, 0) {
-		UK_ASSERT(mrd->vbase != __U64_MAX);
-
-		vaddr = PAGE_ALIGN_DOWN(mrd->vbase);
-		paddr = PAGE_ALIGN_DOWN(mrd->pbase);
-		len   = PAGE_ALIGN_UP(mrd->len + (mrd->vbase - vaddr));
-
-		rc = ukplat_page_map(&kernel_pt, vaddr, paddr,
-				     len >> PAGE_SHIFT,
-				     PAGE_ATTR_PROT_READ |
-				     PAGE_ATTR_PROT_WRITE, 0);
-		if (unlikely(rc))
-			return rc;
-	}
-
-	return 0;
-}
 #endif
 
 static void __noreturn _ukplat_entry2(void)
 {
+#ifndef CONFIG_UK_EFI_STUB
 	ukplat_entry_argp(DECONST(char *, CONFIG_UK_NAME), cmdline, cmdline_len);
-
+#else
+	ukplat_entry_argp(NULL, cmdline, cmdline_len);
+#endif
 	ukplat_lcpu_halt();
 }
 
@@ -363,14 +362,12 @@ void __no_pauth _libkvmplat_start(void *dtb_pointer)
 	/* Get PSCI method from DTB */
 	_dtb_get_psci_method(dtb_pointer);
 
-#ifdef CONFIG_PAGING
 	/* Initialize paging */
-	ret = _init_paging();
+	ret = mem_init();
 	if (unlikely(ret))
 		UK_CRASH("Could not initialize paging (%d)\n", ret);
-#ifdef CONFIG_ENFORCE_W_XOR_X
+#if defined(PAGING) && defined(ENFORCE_W_XOR_X)
 	enforce_w_xor_x();
-#endif /* CONFIG_ENFORCE_W_XOR_X */
 #endif /* CONFIG_PAGING */
 
 #ifdef CONFIG_ARM64_FEAT_PAUTH

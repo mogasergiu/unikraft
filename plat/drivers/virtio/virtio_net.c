@@ -27,6 +27,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <uk/plat/io.h>
 #include <uk/print.h>
 #include <uk/assert.h>
 #include <uk/essentials.h>
@@ -868,6 +869,7 @@ static int virtio_netdev_feature_negotiate(struct uk_netdev *n)
 	UK_ASSERT(n);
 	vndev = to_virtionetdev(n);
 
+	uk_pr_err("phys addr %x\n", ukplat_virt_to_phys(n));
 	/**
 	 * Read device feature bits, and write the subset of feature bits
 	 * understood by the OS and driver to the device. During this step the

@@ -15,28 +15,29 @@
  * as well as above it, keep only what is above.
  */
 #if defined(__X86_64__)
-#define MiB1							0x100000
-static inline void x86_adjust_below_1MiB(uk_efi_mem_desc_t *md) {
+#define PLATFORM_MIN_MEM_ADDR 0x00000100000 /* 1 MiB */
+#elif defined(__ARM_64__)
+#define PLATFORM_MIN_MEM_ADDR 0x00040000000 /* 1 GiB */
+#endif
+static int uk_efi_arch_adjust_md(uk_efi_mem_desc_t *md) {
+	__paddr_t pstart, pend;
 	__sz len;
 
 	len = md->number_of_pages * UK_EFI_PAGE_SIZE;
-	if (md->physical_start < MiB1)
-		if (md->physical_start + len > MiB1) {
-			len -= MiB1 - md->physical_start;
-			md->physical_start = MiB1;
+	pstart = md->physical_start;
+	pend = pstart + len;
+	if (pstart < PLATFORM_MIN_MEM_ADDR)
+		if(pend > PLATFORM_MIN_MEM_ADDR) {
+			len -= PLATFORM_MIN_MEM_ADDR - md->physical_start;
+			md->physical_start = PLATFORM_MIN_MEM_ADDR;
+			md->number_of_pages = len / UK_EFI_PAGE_SIZE;
+
+			return 0;
 		} else {
-			len = 0;
+			return -EINVAL;
 		}
 
-	md->number_of_pages = len / UK_EFI_PAGE_SIZE;
-}
-#endif
-
-static inline void uk_efi_arch_adjust_md(uk_efi_mem_desc_t *md)
-{
-#if defined(__X86_64__)
-	x86_adjust_below_1MiB(md);
-#endif
+	return 0;
 }
 
 uk_efi_sys_tab_t *uk_efi_st;
@@ -89,12 +90,14 @@ static inline void uk_efi_init_vars(uk_efi_hndl_t self_hndl,
 	uk_efi_sh = self_hndl;
 }
 
-static void uk_efi_md_to_bi_mrd(uk_efi_mem_desc_t *const md,
+static int uk_efi_md_to_bi_mrd(uk_efi_mem_desc_t *const md,
 				 struct ukplat_memregion_desc *const mrd)
 {
-	uk_efi_arch_adjust_md(md);
-	if (!md->number_of_pages)
-		return;
+	int rc;
+
+	rc = uk_efi_arch_adjust_md(md);
+	if (rc < 0)
+		return rc;
 
 	switch (md->type) {
 	case UK_EFI_RESERVED_MEMORY_TYPE:
@@ -113,21 +116,13 @@ static void uk_efi_md_to_bi_mrd(uk_efi_mem_desc_t *const md,
 	case UK_EFI_RUNTIME_SERVICES_CODE:
 	case UK_EFI_RUNTIME_SERVICES_DATA:
 		/* Already added */
-		mrd->len = 0;
-
-		return;
+		return -EEXIST;
 	case UK_EFI_LOADER_CODE:
-		mrd->type = UKPLAT_MEMRT_KERNEL;
-
-		mrd->flags = UKPLAT_MEMRF_READ | UKPLAT_MEMRF_EXECUTE;
-
-		break;
 	case UK_EFI_LOADER_DATA:
-		mrd->type = UKPLAT_MEMRT_KERNEL;
-
-		mrd->flags = UKPLAT_MEMRF_READ | UKPLAT_MEMRF_WRITE;
-
-		break;
+		/* Already added through mkbootinfo.py and relocated through
+		 * do_uk_reloc
+		 */
+		return -EEXIST;
 	case UK_EFI_BOOT_SERVICES_CODE:
 	case UK_EFI_BOOT_SERVICES_DATA:
 	case UK_EFI_CONVENTIONAL_MEMORY:
@@ -141,6 +136,8 @@ static void uk_efi_md_to_bi_mrd(uk_efi_mem_desc_t *const md,
 	mrd->pbase = md->physical_start;
 	mrd->vbase = mrd->pbase;
 	mrd->len = md->number_of_pages * UK_EFI_PAGE_SIZE;
+
+	return rc;
 }
 
 static void uk_efi_get_mmap(uk_efi_mem_desc_t **map, uk_efi_uintn_t *map_sz,
@@ -178,189 +175,6 @@ static void uk_efi_get_mmap(uk_efi_mem_desc_t **map, uk_efi_uintn_t *map_sz,
 		uk_efi_crash("Failed to get memory map\n");
 }
 
-/* We want a criteria based on which we decide which memory region to keep
- * or split or discard when coalescing.
- * - UKPLAT_MEMRT_RESERVED is of highest priority since we should not touch it
- * - UKPLAT_MEMRT_FREE is of lowest priority since it is supposedly free
- * - the others are all allocated for Unikraft so they will have the same
- * priority
- */
-static inline int get_mrd_prio(struct ukplat_memregion_desc *const m)
-{
-	switch (m->type) {
-	case UKPLAT_MEMRT_FREE:
-		return 0;
-	case UKPLAT_MEMRT_INITRD:
-	case UKPLAT_MEMRT_CMDLINE:
-	case UKPLAT_MEMRT_STACK:
-	case UKPLAT_MEMRT_DEVICETREE:
-	case UKPLAT_MEMRT_KERNEL:
-		return 1;
-	case UKPLAT_MEMRT_RESERVED:
-		return 2;
-	default:
-		return -1;
-	}
-}
-
-/* Memory region with lower priority must be adjusted in favor of the one with
- * with higher priority
- */
-static inline void overlapping_mrd_fixup(struct ukplat_memregion_desc *const ml,
-					 struct ukplat_memregion_desc *const mr,
-					 int ml_prio, int mr_prio)
-{
-	/* If left memory region is of higher priority */
-	if (ml_prio > mr_prio) {
-		/* If the right region is contained within the left region,
-		 * drop it entirely
-		 */
-		if (RANGE_CONTAIN(ml->pbase, ml->len, mr->pbase, mr->len)) {
-			mr->len = 0;
-
-		/* If the right region has a part of itself in the left region,
-		 * drop that part of the right region only
-		 */
-		} else {
-			mr->len -= ml->pbase + ml->len - mr->pbase;
-			mr->pbase = ml->pbase + ml->len;
-		}
-
-	/* If left memory region is of lower priority */
-	} else {
-		/* If the left memory region is contained within the right
-		 * region, drop it entirely
-		 */
-		if (RANGE_CONTAIN(mr->pbase, mr->len, ml->pbase, ml->len)) {
-			ml->len = 0;
-
-		/* If the left region has a part of itself in the right region,
-		 * drop that part of the left region only
-		 */
-		} else {
-			ml->len = ml->pbase + ml->len - mr->pbase;
-		}
-	}
-}
-
-static void uk_efi_coalesce_bi_mrds(struct ukplat_memregion_list *const mrds)
-{
-	struct ukplat_memregion_desc *m, *ml, *mr;
-	int ml_prio, mr_prio;
-	__u32 i;
-
-	i = 0;
-	m = mrds->mrds;
-	while (i + 1 < mrds->count) {
-		/* Make sure first that they are ordered. If not, swap them */
-		if (m[i].pbase > m[i + 1].pbase ||
-		    (m[i].pbase == m[i + 1].pbase &&
-		     m[i].pbase + m[i].len > m[i + 1].pbase + m[i + 1].len)) {
-			struct ukplat_memregion_desc tmp;
-
-			tmp = m[i];
-			m[i] = m[i + 1];
-			m[i + 1] = tmp;
-		}
-		ml = &m[i];
-		mr = &m[i + 1];
-		ml_prio = get_mrd_prio(ml);
-		mr_prio = get_mrd_prio(mr);
-
-		/* If they overlap */
-		if (RANGE_OVERLAP(ml->pbase,  ml->len, mr->pbase, mr->len)) {
-			/* If they are not of the same priority */
-			if (ml_prio != mr_prio) {
-				overlapping_mrd_fixup(ml, mr, ml_prio, mr_prio);
-
-				/* Remove dropped regions */
-				if (ml->len == 0)
-					ukplat_memregion_list_delete(mrds, i);
-				else if (mr->len == 0)
-					ukplat_memregion_list_delete(mrds,
-								     i + 1);
-				else
-					i++;
-
-			/* If they are of the same priority and different flags,
-			 * it either means that is one of our manually
-			 * introduced memory region descriptors for commandline
-			 * or initrd or devicetree or stack, which have the same
-			 * priority as the kernel type memory region descriptor,
-			 * which got automatically added by uk_efi_md_to_bi_mrd
-			 * as UKPLAT_MEMRT_KERNEL since it was allocated as
-			 * UK_EFI_LOADER_DATA, or it could be something abnormal,
-			 * in which case we will crash the application. For the
-			 * former case, we choose to keep the manually inserted
-			 * memory region descriptor, since its type is more
-			 * specific.
-			 */
-			} else if (ml->flags != mr->flags) {
-				if (ml->type == UKPLAT_MEMRT_KERNEL)
-					ukplat_memregion_list_delete(mrds, i);
-				else if (mr->type == UKPLAT_MEMRT_KERNEL)
-					ukplat_memregion_list_delete(mrds,
-								     i + 1);
-				else
-					uk_efi_crash("Found overlapping memory "
-						     "regions with different "
-						     "permission flags");
-
-			/* If they have the same priority and same flags, merge
-			 * them. If they are contained within each other, drop
-			 * the contained one.
-			 */
-			} else {
-				/* If the left region is contained within the
-				 * right region, drop it
-				 */
-				if (RANGE_CONTAIN(mr->pbase, mr->len,
-						  ml->pbase, ml->len)) {
-					ukplat_memregion_list_delete(mrds, i);
-
-					continue;
-
-				/* If the right region is contained within the
-				 * left region, drop it
-				 */
-				} else if (RANGE_CONTAIN(ml->pbase, ml->len,
-							 mr->pbase, mr->len)) {
-					ukplat_memregion_list_delete(mrds,
-								     i + 1);
-
-					continue;
-				}
-
-				/* If they are not contained within each other,
-				 * merge them.
-				 */
-				ml->len += mr->len;
-
-				/* In case they overlap, delete duplicate
-				 * overlapping region
-				 */
-				ml->len -= ml->pbase + ml->len - mr->pbase;
-
-				/* Delete the memory region we just merged into
-				 * the previous region.
-				 */
-				ukplat_memregion_list_delete(mrds, i + 1);
-			}
-
-		/* If they do not overlap but they are contiguous and have the
-		 * same flags and priority.
-		 */
-		} else if (ml->pbase + ml->len == mr->pbase &&
-			   ml_prio == mr_prio && ml->flags == mr->flags) {
-			ml->len += mr->len;
-			ukplat_memregion_list_delete(mrds, i + 1);
-			i++;
-		} else {
-			i++;
-		}
-	}
-}
-
 static void uk_efi_rt_md_to_bi_mrds(struct ukplat_memregion_desc **const rt_mrds,
 				    __u32 *const rt_mrds_count)
 {
@@ -387,24 +201,23 @@ static void uk_efi_rt_md_to_bi_mrds(struct ukplat_memregion_desc **const rt_mrds
 		uk_efi_crash("Could not find Memory Attribute Table.");
 
 	desc_sz = mat->descriptor_size;
+	*rt_mrds_count = mat->number_of_entries;
 	status = uk_efi_bs->allocate_pool(UK_EFI_LOADER_DATA,
-					  mat->number_of_entries * desc_sz,
+					  *rt_mrds_count * sizeof(**rt_mrds),
 					  (void **)rt_mrds);
 	if (status != UK_EFI_SUCCESS)
 		uk_efi_crash("Failed to allocate memory for Memory Sub-region"
 			     "Descriptors.\n");
 
-	*rt_mrds_count = 0;
 	mat_md = (uk_efi_mem_desc_t *)mat->entry;
-	for (i = 0; i < mat->number_of_entries; i++) {
+	for (i = 0; i < *rt_mrds_count; i++) {
 		if (!(mat_md->attribute & UK_EFI_MEMORY_RUNTIME))
 			continue;
 
-		uk_efi_arch_adjust_md(mat_md);
-		if (!mat_md->number_of_pages)
+		if (uk_efi_arch_adjust_md(mat_md) < 0)
 			continue;
 
-		rt_mrd = *rt_mrds + *rt_mrds_count;
+		rt_mrd = *rt_mrds + i;
 		rt_mrd->pbase = mat_md->physical_start;
 		rt_mrd->len = mat_md->number_of_pages * UK_EFI_PAGE_SIZE;
 		rt_mrd->vbase = rt_mrd->pbase;
@@ -413,7 +226,6 @@ static void uk_efi_rt_md_to_bi_mrds(struct ukplat_memregion_desc **const rt_mrds
 		if (mat_md->attribute & UK_EFI_MEMORY_XP)
 			rt_mrd->flags |= UKPLAT_MEMRF_EXECUTE;
 
-		(*rt_mrds_count)++;
 		mat_md = (uk_efi_mem_desc_t *)((__u8 *)mat_md + desc_sz);
 	}
 }
@@ -439,14 +251,13 @@ static void uk_efi_setup_bootinfo_mrds(struct ukplat_bootinfo *const bi)
 	map_end = (struct uk_efi_mem_desc *)((__u8 *)map_start + map_sz);
 	for (md = map_start; md < map_end;
 	     md = (struct uk_efi_mem_desc *)((__u8 *)md + desc_sz)) {
-		uk_efi_md_to_bi_mrd(md, &mrd);
-		if (!mrd.len)
+		if (uk_efi_md_to_bi_mrd(md, &mrd) < 0)
 			continue;
 
 		ukplat_memregion_list_insert(&bi->mrds,  &mrd);
 	}
 
-	uk_efi_coalesce_bi_mrds(&bi->mrds);
+	ukplat_memregion_list_coalesce(&bi->mrds);
 }
 
 static uk_efi_ld_img_hndl_t* uk_efi_get_uk_img_hndl()
@@ -574,7 +385,7 @@ static void uk_efi_setup_bootinfo_cmdl(struct ukplat_bootinfo *const bi)
 	bi->cmdline = (__u64)cmdl;
 }
 
-static void uk_efi_setup_initrd()
+static void uk_efi_setup_bootinfo_initrd(struct ukplat_bootinfo *const bi)
 {
 	struct ukplat_memregion_desc mrd = {0};
 	uk_efi_ld_img_hndl_t *uk_img_hndl;
@@ -595,10 +406,10 @@ static void uk_efi_setup_initrd()
 	mrd.len = len;
 	mrd.type = UKPLAT_MEMRT_INITRD;
 	mrd.flags = UKPLAT_MEMRF_READ | UKPLAT_MEMRF_MAP;
-	ukplat_memregion_list_insert(&ukplat_bootinfo_get()->mrds,  &mrd);
+	ukplat_memregion_list_insert(&bi->mrds,  &mrd);
 }
 
-static void uk_efi_setup_dtb()
+static void uk_efi_setup_bootinfo_dtb(struct ukplat_bootinfo *const bi)
 {
 	struct ukplat_memregion_desc mrd = {0};
 	uk_efi_ld_img_hndl_t *uk_img_hndl;
@@ -619,7 +430,9 @@ static void uk_efi_setup_dtb()
 	mrd.len = len;
 	mrd.type = UKPLAT_MEMRT_DEVICETREE;
 	mrd.flags = UKPLAT_MEMRF_READ | UKPLAT_MEMRF_MAP;
-	ukplat_memregion_list_insert(&ukplat_bootinfo_get()->mrds,  &mrd);
+	ukplat_memregion_list_insert(&bi->mrds,  &mrd);
+
+	bi->dtb = (__u64)dtb;
 }
 
 static void uk_efi_setup_bootinfo()
@@ -638,9 +451,9 @@ static void uk_efi_setup_bootinfo()
 
 	uk_efi_bs->copy_mem(bi->bootprotocol, bp, sizeof(bp));
 
-	uk_efi_setup_initrd();
+	uk_efi_setup_bootinfo_initrd(bi);
 
-	uk_efi_setup_dtb();
+	uk_efi_setup_bootinfo_dtb(bi);
 
 	uk_efi_setup_bootinfo_mrds(bi);
 }

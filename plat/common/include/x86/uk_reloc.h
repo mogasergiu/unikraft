@@ -11,6 +11,7 @@
 .globl \sym\()_uk_reloc_imm\bytes\()\phys\()
 .set \sym\()_uk_reloc_imm\bytes\()\phys\(), . - \bytes
 	nop
+	ur_sec_updt
 #else
 	mov	$\sym, \reg
 #endif

@@ -16,11 +16,18 @@
 
 #ifdef __ASSEMBLY__
 
+.macro ur_sec_updt
+.pushsection .uk_reloc
+	.fill 3, 8, 0
+.popsection
+.endm
+
 .macro ur_data type:req, sym:req, bytes:req, phys
 #ifdef CONFIG_OPTIMIZE_PIE
 .globl \sym\()_uk_reloc_data\bytes\()\phys\()
 .set \sym\()_uk_reloc_data\bytes\()\phys\(), .
 	.\type	UK_RELOC_PLACEHOLDER
+	ur_sec_updt
 #else
 	.\type	\sym
 #endif
@@ -71,16 +78,6 @@ struct uk_reloc_hdr {
 	__u32 signature;
 	struct uk_reloc urs[];
 } __packed __align(__SIZEOF_LONG__);
-
-/* CONFIG_MAX_UK_RELOC_SYMS symbolizes the amount of present relocations
- * whose existence was forced through one of the present macros (i.e. ur_pte,
- * ur_mov, ur_data, etc.) instead of the already existing ones generated inside
- * the .rela.dyn ELF section. The default is 32 but this can be changed through
- * the configuration menu if CONFIG_OPTIMIZE_PIE is enabled of course.
- */
-#define UKPLAT_UK_RELOC_SIZE						\
-	(sizeof(struct uk_reloc_hdr) +					\
-	CONFIG_MAX_UK_RELOC_SYMS * sizeof(struct uk_reloc))
 
 /* Misaligned access here is never going to happen for a non-x86 architecture
  * as there are no uk_reloc_imm relocation types defined for them.
