@@ -31,7 +31,7 @@ opt_hdr:
   .long 0				/* BaseOfCode */
 
 xhdr_fields:
-  .quad _base_addr			/* ImageBase */
+  .quad 0x1000000/* ImageBase */
   .long 0x1000				/* SectionAlignment */
   .long 0x1000				/* FileAlignment */
   .word 0				/* MajorOperatingSystemVersion */
@@ -129,6 +129,8 @@ section_tab:
 	IMAGE_SCN_MEM_WRITE		| \
 	IMAGE_SCN_ALIGN_4096BYTES	/* Characteristics */
 
+.section .text
+.align 8
 uk_efi_entry64:
 	/* EFI gives us a stack misaligned by 8 */
 	and $~0xf, %rsp

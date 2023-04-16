@@ -82,9 +82,18 @@ def main():
 
     # Image size in memory is equal to the last PT_LOAD + its size
     img_sz = 0
+    base_addr = get_sym_val(elf_dbg, r'_base_addr')
     for p in ld_phdrs:
         if img_sz < p['VirtAddr'] + p['MemSiz']:
             img_sz = p['VirtAddr'] + p['MemSiz']
+
+    # img_sz is Address of last loadable section (.bss) + its size, so to get
+    # the final size of the loaded image in memory subtract the base_address
+    img_sz -= base_addr
+
+    # Since it is a PE, the Header and MS-DOS stub will also get loaded, so add
+    # their size as well
+    img_sz += 0x1000
 
     # Re-adjust start addresses of the other PT_LOAD's
     for lp in ld_phdrs:
