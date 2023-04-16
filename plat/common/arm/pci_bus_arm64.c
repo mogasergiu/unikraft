@@ -154,6 +154,8 @@ int arch_pci_probe(struct uk_alloc *pha)
 				   (int) devid.device_id,
 				   (int) devid.subsystem_device_id,
 				   (int) devid.subsystem_vendor_id);
+			if (devid.subsystem_device_id == 2)
+				continue;
 
 			/* TODO: gracefully judge it is a pci host bridge */
 			if (bus == 0 && DEVFN(dev, 0) == 0) {

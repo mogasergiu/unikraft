@@ -30,8 +30,19 @@ static inline unsigned long get_rt_baddr()
 }
 #endif
 
-static __u8 __section(".uk_reloc") __used
-uk_reloc_sec[UKPLAT_UK_RELOC_SIZE];
+static __u64 __section(".uk_reloc") __used uk_reloc_sec;
+
+static inline struct uk_reloc_hdr *get_uk_reloc_hdr()
+{
+	struct uk_reloc_hdr *ur_hdr;
+
+	ur_hdr = (struct uk_reloc_hdr *)&uk_reloc_sec;
+	if (unlikely(!ur_hdr) &&
+	    unlikely(ur_hdr->signature != UK_RELOC_SIGNATURE))
+		return NULL;
+
+	return ur_hdr;
+}
 
 void __used do_uk_reloc(__paddr_t r_paddr, __vaddr_t r_vaddr)
 {
@@ -50,8 +61,8 @@ void __used do_uk_reloc(__paddr_t r_paddr, __vaddr_t r_vaddr)
 	__u64 val;
 
 	/* Check .uk_reloc signature */
-	ur_hdr = (struct uk_reloc_hdr *)uk_reloc_sec;
-	while (ur_hdr->signature != UK_RELOC_SIGNATURE)
+	ur_hdr = get_uk_reloc_hdr();
+	if (!ur_hdr)
 		halt();
 
 	rt_baddr = get_rt_baddr();
@@ -71,6 +82,7 @@ void __used do_uk_reloc(__paddr_t r_paddr, __vaddr_t r_vaddr)
 		mrdp->pbase += r_paddr;
 		mrdp->vbase = mrdp->pbase;
 	}
+
 	/* Back up the original link time base address. We are going to lose
 	 * it once we apply all relocations. Instead of impacting the runtime
 	 * performance of the relocator by doing a check for every relocation
