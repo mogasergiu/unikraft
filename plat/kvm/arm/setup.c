@@ -51,8 +51,6 @@
 #include <uk/plat/paging.h>
 #include <uk/plat/common/w_xor_x.h>
 #include <uk/falloc.h>
-
-struct uk_pagetable kernel_pt;
 #endif /* CONFIG_PAGING */
 
 extern struct ukplat_memregion_desc bpt_unmap_mrd;
@@ -102,6 +100,141 @@ enomethod:
 	smccc_psci_call = NULL;
 }
 
+<<<<<<< HEAD
+=======
+static int _init_dtb_mem(void *dtb_pointer)
+{
+	int fdt_mem, prop_len = 0, prop_min_len;
+	int naddr, nsize, rc;
+	const __u64 *regs;
+	__u64 mem_base, mem_size;
+
+	/* search for assigned VM memory in DTB */
+	if (fdt_num_mem_rsv(dtb_pointer) != 0)
+		uk_pr_warn("Reserved memory is not supported\n");
+
+	fdt_mem = fdt_node_offset_by_prop_value(dtb_pointer, -1,
+						"device_type",
+						"memory", sizeof("memory"));
+	if (fdt_mem < 0) {
+		uk_pr_warn("No memory found in DTB\n");
+		return fdt_mem;
+	}
+
+	naddr = fdt_address_cells(dtb_pointer, fdt_mem);
+	if (naddr < 0 || naddr >= FDT_MAX_NCELLS)
+		UK_CRASH("Could not find proper address cells!\n");
+
+	nsize = fdt_size_cells(dtb_pointer, fdt_mem);
+	if (nsize < 0 || nsize >= FDT_MAX_NCELLS)
+		UK_CRASH("Could not find proper size cells!\n");
+
+	/*
+	 * QEMU will always provide us at least one bank of memory.
+	 * unikraft will use the first bank for the time-being.
+	 */
+	regs = fdt_getprop(dtb_pointer, fdt_mem, "reg", &prop_len);
+
+	/*
+	 * The property must contain at least the start address
+	 * and size, each of which is 8-bytes.
+	 */
+	prop_min_len = (int)sizeof(fdt32_t) * (naddr + nsize);
+	if (regs == NULL || prop_len < prop_min_len)
+		UK_CRASH("Bad 'reg' property: %p %d\n", regs, prop_len);
+
+	/* If we have more than one memory bank, give a warning messasge */
+	if (prop_len > prop_min_len)
+		uk_pr_warn("Currently, we support only one memory bank!\n");
+
+	mem_base = fdt64_to_cpu(regs[0]);
+	mem_size = fdt64_to_cpu(regs[1]);
+	if (mem_base > __TEXT)
+		UK_CRASH("Fatal: Image outside of RAM\n");
+
+        rc = ukplat_memregion_list_insert(&ukplat_bootinfo_get()->mrds,
+		&(struct ukplat_memregion_desc){
+			.vbase = (__vaddr_t)mem_base,
+			.pbase = (__paddr_t)mem_base,
+			.len   = mem_size,
+			.type  = UKPLAT_MEMRT_FREE,
+			.flags = UKPLAT_MEMRF_READ |
+				 UKPLAT_MEMRF_WRITE,
+		});
+	if (unlikely(rc < 0))
+		UK_CRASH("Could not add free memory descriptor\n");
+
+	return ukplat_memregion_list_coalesce(&ukplat_bootinfo_get()->mrds);
+}
+
+#ifdef CONFIG_PAGING
+#define DRAM_START					0x40000000UL
+#define DRAM_LEN					0x40000000UL
+static int mem_init(void)
+{
+	struct ukplat_memregion_desc *mrd;
+	struct uk_pagetable *pt;
+	int rc;
+
+	ukplat_memregion_foreach(&mrd, 0, 0, 0)
+		if (!IN_RANGE(mrd->pbase, DRAM_START, DRAM_LEN))
+			mrd->flags &= ~UKPLAT_MEMRF_MAP;
+
+	rc = ukplat_paging_init();
+	if (unlikely(rc < 0))
+		return rc;
+
+#ifdef CONFIG_LIBUKBOOT_HEAP_BASE
+	pt = ukplat_pt_get_active();
+	rc = ukplat_page_unmap(pt, CONFIG_LIBUKBOOT_HEAP_BASE,
+			       pt->fa->free_memory >> PAGE_SHIFT,
+			       PAGE_FLAG_KEEP_PTES);
+	if (unlikely(rc))
+		return rc;
+#endif
+
+	return 0;
+}
+#else
+#define L0_PT0_START_PAGE				0x40000000UL
+#define L0_PT0_LEN					0x00200000UL
+extern __pte_t arm64_bpt_l0_pt0[];
+
+static int mem_init(void)
+{
+	struct ukplat_memregion_desc *mrd;
+	__paddr_t paddr, pstart, pend;
+	__pte_t pte_attr;
+	__sz len, idx;
+
+	ukplat_memregion_foreach(&mrd, 0, UKPLAT_MEMRF_MAP, UKPLAT_MEMRF_MAP) {
+		pstart = PAGE_ALIGN_UP(mrd->pbase);
+		len = PAGE_ALIGN_DOWN(mrd->len - (pstart - mrd->pbase));
+
+		if (unlikely(len == 0))
+			continue;
+
+		if (!RANGE_CONTAIN(L0_PT0_START_PAGE, L0_PT0_LEN, pstart, len))
+			continue;
+
+		if (mrd->flags & UKPLAT_MEMRF_WRITE)
+			pte_attr = PTE_ATTR_NORMAL_RW | PTE_TYPE_PAGE;
+		else if (mrd->flags & UKPLAT_MEMRF_EXECUTE)
+			pte_attr = PTE_ATTR_NORMAL_RX | PTE_TYPE_PAGE;
+		else
+			pte_attr = PTE_ATTR_NORMAL_RO | PTE_TYPE_PAGE;
+
+		pend = pstart + len;
+		for (paddr = pstart; paddr < pend; paddr += PAGE_SIZE) {
+			idx = (paddr - L0_PT0_START_PAGE) >> PAGE_SHIFT;
+			arm64_bpt_l0_pt0[idx] = paddr + pte_attr;
+		}
+	}
+
+	return 0;
+}
+#endif
+
 static char *cmdline;
 static __sz cmdline_len;
 
@@ -120,10 +253,17 @@ static inline int cmdline_init(struct ukplat_bootinfo *bi)
 					 UKPLAT_MEMRF_WRITE |
 					 UKPLAT_MEMRF_MAP);
 	if (unlikely(!cmdline))
-		return -ENOMEM;
+		UK_CRASH("Could not allocate scratch command-line memory");
 
-	strncpy(cmdline, cmdl, cmdline_len);
-	return 0;
+	strncpy(cmdline, cmdl, len);
+	cmdline_len = len;
+
+	uk_pr_info("Command line: %s\n", cmdline);
+
+	return;
+
+enocmdl:
+	uk_pr_info("No command line found\n");
 }
 
 static void __noreturn _ukplat_entry2(void)
