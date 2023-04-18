@@ -46,6 +46,8 @@
 #include <uk/assert.h>
 #include <uk/print.h>
 #include <uk/plat/paging.h>
+#include <uk/plat/common/sections.h>
+#include <uk/plat/common/bootinfo.h>
 #include <uk/falloc.h>
 
 #define __PLAT_CMN_ARCH_PAGING_H__
@@ -86,6 +88,7 @@ static unsigned int pg_page_largest_level = PAGE_LEVEL;
  * need a way to derive the struct pagetable pointer from the configured
  * HW page table base pointer.
  */
+static struct uk_pagetable kernel_pt;
 static struct uk_pagetable *pg_active_pt;
 
 struct uk_pagetable *ukplat_pt_get_active(void)
@@ -1417,4 +1420,144 @@ void ukplat_page_kunmap(struct uk_pagetable *pt, __vaddr_t vaddr,
 	len = pages * PAGE_Lx_SIZE(level);
 
 	pgarch_kunmap(pt, vaddr, len);
+}
+
+
+static inline unsigned long bootinfo_to_page_attr(__u16 flags)
+{
+	unsigned long prot = 0;
+
+	if (flags & UKPLAT_MEMRF_READ)
+		prot |= PAGE_ATTR_PROT_READ;
+	if (flags & UKPLAT_MEMRF_WRITE)
+		prot |= PAGE_ATTR_PROT_WRITE;
+	if (flags & UKPLAT_MEMRF_EXECUTE)
+		prot |= PAGE_ATTR_PROT_EXEC;
+
+	return prot;
+}
+
+static int unmap_static_bpt(struct ukplat_bootinfo *bi)
+{
+	int rc;
+
+	/* TODO: Until we generate the boot page table at compile time, we
+	 * manually add two untyped unmap regions to the boot info to force an
+	 * unmapping of the 1:1 mapping after and before the kernel image
+	 * before mapping only the necessary parts.
+	 */
+#define PLATFORM_MAX_MEM_ADDR 0x00100000000 /* 4 GiB */
+#define PLATFORM_MIN_MEM_ADDR 0x00000100000 /* 1 MiB */
+	rc = ukplat_memregion_list_insert(&bi->mrds,
+		&(struct ukplat_memregion_desc){
+			.vbase = PAGE_ALIGN_UP(__END),
+			.pbase = 0,
+			.len   = PLATFORM_MAX_MEM_ADDR - PAGE_ALIGN_UP(__END),
+			.type  = 0,
+			.flags = UKPLAT_MEMRF_UNMAP,
+		});
+	if (unlikely(rc < 0))
+		return rc;
+
+	return ukplat_memregion_list_insert(&bi->mrds,
+		&(struct ukplat_memregion_desc){
+			.vbase = PLATFORM_MIN_MEM_ADDR,
+			.pbase = 0,
+			.len   = PAGE_ALIGN_DOWN(__BASE_ADDR) -
+				 PLATFORM_MIN_MEM_ADDR,
+			.type  = 0,
+			.flags = UKPLAT_MEMRF_UNMAP,
+		});
+}
+
+int ukplat_paging_init(void)
+{
+	struct ukplat_bootinfo *bi = ukplat_bootinfo_get();
+	struct ukplat_memregion_desc *mrd;
+	__sz len;
+	__vaddr_t vaddr;
+	__paddr_t paddr;
+	unsigned long prot;
+	int rc;
+
+	rc = unmap_static_bpt(bi);
+	if (unlikely(rc < 0))
+		return rc;
+
+	/* Initialize the frame allocator with the free physical memory
+	 * regions supplied via the boot info. The new page table uses the
+	 * one currently active.
+	 */
+	rc = -ENOMEM; /* In case there is no region */
+	ukplat_memregion_foreach(&mrd, UKPLAT_MEMRT_FREE, 0, 0) {
+		paddr  = PAGE_ALIGN_UP(mrd->pbase);
+		len    = PAGE_ALIGN_DOWN(mrd->len - (paddr - mrd->pbase));
+
+		/* Not mapped */
+		mrd->vbase = __U64_MAX;
+		mrd->flags &= ~UKPLAT_MEMRF_PERMS;
+
+		if (unlikely(len == 0))
+			continue;
+
+		if (!kernel_pt.fa) {
+			rc = ukplat_pt_init(&kernel_pt, paddr, len);
+			if (unlikely(rc))
+				kernel_pt.fa = NULL;
+		} else {
+			rc = ukplat_pt_add_mem(&kernel_pt, paddr, len);
+		}
+
+		/* We do not fail if we cannot add this memory region to the
+		 * frame allocator. If the range is too small to hold the
+		 * metadata, this is expected. Just ignore this error.
+		 */
+		if (unlikely(rc && rc != -ENOMEM))
+			uk_pr_err("Cannot add %12lx-%12lx to paging: %d\n",
+				  paddr, paddr + len, rc);
+	}
+
+	if (unlikely(!kernel_pt.fa))
+		return rc;
+
+	/* Activate page table */
+	rc = ukplat_pt_set_active(&kernel_pt);
+	if (unlikely(rc))
+		return rc;
+
+	/* Perform unmappings */
+	ukplat_memregion_foreach(&mrd, 0, UKPLAT_MEMRF_UNMAP,
+				 UKPLAT_MEMRF_UNMAP) {
+		UK_ASSERT(mrd->vbase != __U64_MAX);
+
+		vaddr = PAGE_ALIGN_DOWN(mrd->vbase);
+		len   = PAGE_ALIGN_UP(mrd->len + (mrd->vbase - vaddr));
+
+		rc = ukplat_page_unmap(&kernel_pt, vaddr,
+				       len >> PAGE_SHIFT,
+				       PAGE_FLAG_KEEP_FRAMES);
+		if (unlikely(rc))
+			return rc;
+	}
+
+	/* Perform mappings */
+	ukplat_memregion_foreach(&mrd, 0, UKPLAT_MEMRF_MAP,
+				 UKPLAT_MEMRF_MAP) {
+		UK_ASSERT(mrd->vbase != __U64_MAX);
+
+		vaddr = PAGE_ALIGN_DOWN(mrd->vbase);
+		paddr = PAGE_ALIGN_DOWN(mrd->pbase);
+		len   = PAGE_ALIGN_UP(mrd->len + (mrd->vbase - vaddr));
+		prot  = bootinfo_to_page_attr(mrd->flags);
+
+		rc = ukplat_page_map(&kernel_pt, vaddr, paddr,
+				     len >> PAGE_SHIFT, prot, 0);
+		if (unlikely(rc))
+			return rc;
+	}
+
+	ukplat_memregion_list_delete(&bi->mrds, 0);
+	ukplat_memregion_list_delete(&bi->mrds, 0);
+
+	return 0;
 }
