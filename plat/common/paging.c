@@ -1446,8 +1446,13 @@ static int unmap_static_bpt(struct ukplat_bootinfo *bi)
 	 * unmapping of the 1:1 mapping after and before the kernel image
 	 * before mapping only the necessary parts.
 	 */
+#if defined(__X86_64__)
 #define PLATFORM_MAX_MEM_ADDR 0x00100000000 /* 4 GiB */
 #define PLATFORM_MIN_MEM_ADDR 0x00000100000 /* 1 MiB */
+#elif defined(__ARM_64__)
+#define PLATFORM_MAX_MEM_ADDR 0x00080000000 /* 2 GiB */
+#define PLATFORM_MIN_MEM_ADDR 0x00040000000 /* 1 GiB */
+#endif
 	rc = ukplat_memregion_list_insert(&bi->mrds,
 		&(struct ukplat_memregion_desc){
 			.vbase = PAGE_ALIGN_UP(__END),
