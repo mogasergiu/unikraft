@@ -37,26 +37,35 @@
 #include <uk/arch/types.h>
 #include <uk/essentials.h>
 
-struct ACPISDTHeader {
-	char Signature[4];
-	__u32 Length;
-	__u8 Revision;
-	__u8 Checksum;
-	char OEMID[6];
-	char OEMTableID[8];
-	__u32 OEMRevision;
-	__u32 CreatorID;
-	__u32 CreatorRevision;
+#define ACPI_OEM_ID_LEN						6
+#define ACPI_OEM_TAB_ID_LEN					8
+#define ACPI_SDT_SIGNATURE_LEN					4
+
+struct acpi_sdt_hdr {
+	char signature[ACPI_SDT_SIGNATURE_LEN];
+	__u32 tab_len;
+	__u8 revision;
+	__u8 checksum;
+	char oem_id[ACPI_OEM_ID_LEN];
+	char oem_table_id[ACPI_OEM_TAB_ID_LEN];
+	__u32 oem_revision;
+	char creator_id[4];
+	__u32 creator_revision;
 } __packed;
 
-struct RSDT {
-	struct ACPISDTHeader h;
-	__u32 Entry[];
+struct acpi_subsdt_hdr {
+	__u8 type;
+	__u8 len;
 } __packed;
 
-struct XSDT {
-	struct ACPISDTHeader h;
-	__u64 Entry[];
+struct acpi_rsdt {
+	struct acpi_sdt_hdr hdr;
+	__u32 entry[];
+} __packed;
+
+struct acpi_xsdt {
+	struct acpi_sdt_hdr hdr;
+	__u64 entry[];
 } __packed;
 
 #endif /* __PLAT_CMN_X86_SDT_H__ */
