@@ -49,6 +49,28 @@ struct acpi_rsdp {
 	__u8 reserved[3];
 } __packed;
 
+/**
+ * Check an ACPI structure against its checksum
+ *
+ * @param buf
+ *   The pointer to the ACPI structure
+ * @param len
+ *   The size of the ACPI structure
+ *
+ * @return
+ *   0 on correct checksum, != 0 otherwise
+ */
+static inline __u8 get_acpi_checksum(void *const buf, const __sz len)
+{
+	const __u8 *const ptr_end = (__u8 *)buf + len;
+	const __u8 *ptr = (__u8 *)buf;
+	__u8 checksum = 0;
+
+	while (ptr < ptr_end)
+		checksum += *ptr++;
+
+	return checksum;
+}
 
 /**
  * Detect ACPI version and discover ACPI tables.
