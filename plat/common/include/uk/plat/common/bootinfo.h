@@ -40,6 +40,9 @@ struct ukplat_bootinfo {
 	/** Address of the devicetree blob */
 	__u64 dtb;
 
+	/** Address of UEFI System Table */
+	__u64 efi_st;
+
 	/**
 	 * List of memory regions. Must be the last member as the
 	 * memory regions directly follow this boot information structure
