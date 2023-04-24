@@ -36,15 +36,6 @@
 
 #include <x86/acpi/sdt.h>
 
-#define MADT_FLAGS_PCAT_COMPAT			0x01
-
-struct acpi_madt {
-	struct acpi_sdt_hdr hdr;
-	__u32 lapic_paddr;
-	__u32 flags;
-	__u8 entries[];
-} __packed;
-
 #define MADT_LAPIC				0x00
 #define MADT_IO_APIC				0x01
 #define MADT_INT_SRC_OVERRIDE			0x02
