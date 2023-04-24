@@ -147,11 +147,11 @@ static void ukreloc_mp_init(void)
 
 int lcpu_arch_mp_init(void *arg __unused)
 {
-	struct MADT *madt;
+	struct acpi_madt *madt;
 	union {
-		struct MADTEntryHeader *h;
-		struct MADTType0Entry *e0;
-		struct MADTType9Entry *e9;
+		struct acpi_subsdt_hdr *h;
+		struct acpi_madt_lapic *e0;
+		struct acpi_madt_x2apic *e9;
 	} m;
 	__sz off, len;
 	struct lcpu *lcpu;
@@ -166,25 +166,25 @@ int lcpu_arch_mp_init(void *arg __unused)
 	madt = acpi_get_madt();
 	UK_ASSERT(madt);
 
-	len = madt->h.Length - sizeof(struct MADT);
-	for (off = 0; off < len; off += m.h->Length) {
-		m.h = (struct MADTEntryHeader *)(madt->Entries + off);
+	len = madt->hdr.tab_len - sizeof(struct acpi_madt);
+	for (off = 0; off < len; off += m.h->len) {
+		m.h = (struct acpi_subsdt_hdr *)(madt->entries + off);
 
-		switch (m.h->Type) {
-		case MADT_TYPE_LAPIC:
-			if (!(m.e0->Flags & MADT_T0_FLAGS_ENABLED) &&
-			    !(m.e0->Flags & MADT_T0_FLAGS_ONLINE_CAPABLE))
+		switch (m.h->type) {
+		case MADT_LAPIC:
+			if (!(m.e0->flags & MADT_LAPIC_FLAGS_ENABLED) &&
+			    !(m.e0->flags & MADT_LAPIC_FLAGS_ONLINE_CAPABLE))
 				continue; /* goto next MADT entry */
 
-			cpu_id = m.e0->APICID;
+			cpu_id = m.e0->lapic_id;
 			break;
 
-		case MADT_TYPE_LX2APIC:
-			if (!(m.e9->Flags & MADT_T9_FLAGS_ENABLED) &&
-			    !(m.e9->Flags & MADT_T9_FLAGS_ONLINE_CAPABLE))
+		case MADT_LX2APIC:
+			if (!(m.e9->flags & MADT_X2APIC_FLAGS_ENABLED) &&
+			    !(m.e9->flags & MADT_X2APIC_FLAGS_ONLINE_CAPABLE))
 				continue; /* goto next MADT entry */
 
-			cpu_id = m.e9->X2APICID;
+			cpu_id = m.e9->lapic_id;
 			break;
 
 		default:
