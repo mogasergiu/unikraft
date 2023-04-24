@@ -104,6 +104,36 @@ static void acpi_list_tables(void)
 }
 #endif /* UK_DEBUG */
 
+static struct acpi_rsdp *get_efi_st_rsdp()
+{
+	struct ukplat_bootinfo *bi = ukplat_bootinfo_get();
+	uk_efi_uintn_t ct_count, i;
+	struct acpi_rsdp *rsdp;
+	uk_efi_cfg_tab_t *ct;
+
+	UK_ASSERT(bi);
+
+	if (!bi->efi_st)
+		return NULL;
+
+	ct = ((uk_efi_sys_tab_t *)bi->efi_st)->configuration_table;
+	ct_count = ((uk_efi_sys_tab_t *)bi->efi_st)->number_of_table_entries;
+
+	UK_ASSERT(ct);
+	UK_ASSERT(ct_count);
+
+	rsdp = NULL;
+	for (i = 0; i < ct_count; i++)
+		if (!memcmp(&ct[i].vendor_guid, UK_EFI_ACPI20_TABLE_GUID,
+			    sizeof(ct[i].vendor_guid)))
+			return ct[i].vendor_table;
+		else if (!memcmp(&ct[i].vendor_guid, UK_EFI_ACPI10_TABLE_GUID,
+				 sizeof(ct[i].vendor_guid)))
+			rsdp = ct[i].vendor_table;
+
+	return rsdp;
+}
+
 static struct acpi_rsdp *get_bios_rom_rsdp()
 {
 	__paddr_t ptr;
@@ -121,6 +151,12 @@ static struct acpi_rsdp *get_bios_rom_rsdp()
 
 static struct acpi_rsdp *get_rsdp()
 {
+	struct acpi_rsdp *rsdp;
+
+	rsdp = get_efi_st_rsdp();
+	if (rsdp)
+		return rsdp;
+
 	return get_bios_rom_rsdp();
 }
 
