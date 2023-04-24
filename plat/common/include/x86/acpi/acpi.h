@@ -37,22 +37,18 @@
 #include <x86/acpi/sdt.h>
 #include <x86/acpi/madt.h>
 
-struct RSDPDescriptor {
-	char Signature[8];
-	__u8 Checksum;
-	char OEMID[6];
-	__u8 Revision;
-	__u32 RsdtAddress;
+struct acpi_rsdp {
+	char signature[8];
+	__u8 checksum;
+	char oem_id[ACPI_OEM_ID_LEN];
+	__u8 revision;
+	__u32 rsdt_paddr;
+	__u32 tab_len;
+	__u64 xsdt_paddr;
+	__u8 xchecksum;
+	__u8 reserved[3];
 } __packed;
 
-struct RSDPDescriptor20 {
-	struct RSDPDescriptor v1;
-
-	__u32 Length;
-	__u64 XsdtAddress;
-	__u8 ExtendedChecksum;
-	__u8 Reserved[3];
-} __packed;
 
 /**
  * Detect ACPI version and discover ACPI tables.
