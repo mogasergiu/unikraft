@@ -37,6 +37,8 @@
 #include <x86/acpi/sdt.h>
 #include <x86/acpi/madt.h>
 
+#define RSDP_SIGNATURE		"RSD PTR "
+
 struct acpi_rsdp {
 	char signature[8];
 	__u8 checksum;
@@ -73,18 +75,23 @@ static inline __u8 get_acpi_checksum(void *const buf, const __sz len)
 }
 
 /**
- * Detect ACPI version and discover ACPI tables.
+ * Get an ACPI table by its signature.
+ *
+ * @param signature
+ *   The signature of the desired ACPI table.
+ *
+ * @param tbl
+ *   The pointer where the found ACPI table will be stored.
+ *
+ * @return ACPI table pointer on success, NULL otherwise.
+ */
+int acpi_get_table(const char *const signature, void **const tbl);
+
+/**
+ * Detect ACPI version and fetch ACPI tables.
  *
  * @return 0 on success, -errno otherwise.
  */
 int acpi_init(void);
-
-/**
- * Return the detected ACPI version.
- *
- * @return 0 if ACPI is not initialized or initialization failed, ACPI version
- *    otherwise.
- */
-int acpi_get_version(void);
 
 #endif /* __PLAT_CMN_X86_ACPI_H__ */
