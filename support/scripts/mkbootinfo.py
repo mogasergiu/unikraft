@@ -96,6 +96,7 @@ def main():
         secobj.write(b'\0' * 8) # cmdline
         secobj.write(b'\0' * 8) # cmdline_len
         secobj.write(b'\0' * 8) # dtb
+        secobj.write(b'\0' * 8) # efi_st
         secobj.write(cap.to_bytes(4, endianness)) # mrds.capacity
         secobj.write(b'\0' * 4) # mrds.count
 
