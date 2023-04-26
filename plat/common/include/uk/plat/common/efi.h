@@ -38,6 +38,15 @@ typedef enum uk_efi_if_type {
 	EFI_NATIVE_INTERFACE
 } uk_efi_if_type_t;
 
+#define UK_EFI_VARIABLE_NON_VOLATILE 0x00000001
+#define UK_EFI_VARIABLE_BOOTSERVICE_ACCESS 0x00000002
+#define UK_EFI_VARIABLE_RUNTIME_ACCESS 0x00000004
+#define UK_EFI_VARIABLE_HARDWARE_ERROR_RECORD 0x00000008
+#define UK_EFI_VARIABLE_AUTHENTICATED_WRITE_ACCESS 0x00000010
+#define UK_EFI_VARIABLE_TIME_BASED_AUTHENTICATED_WRITE_ACCESS 0x00000020
+#define UK_EFI_VARIABLE_APPEND_WRITE 0x00000040
+#define UK_EFI_VARIABLE_ENHANCED_AUTHENTICATED_ACCESS 0x00000080
+
 #define UK_EFI_PAGE_SHIFT		12
 #define UK_EFI_PAGE_SIZE		(1UL << UK_EFI_PAGE_SHIFT)
 #define UK_EFI_PAGES_MAX		(__U64_MAX >> UK_EFI_PAGE_SHIFT)
@@ -381,6 +390,13 @@ typedef struct uk_efi_time {
 	__u8 pad2;
 } uk_efi_time_t;
 
+#define MEMORY_ONLY_RESET_CONTROL_GUID						\
+	&(uk_efi_guid_t){							\
+		.b0_3 = 0xe20939be,						\
+		.b4_5 = 0x32d4,							\
+		.b6_7 = 0x41be,							\
+		.b8_15 = {0xa1, 0x50, 0x89, 0x7f, 0x85, 0xd4, 0x98, 0x29},	\
+	}
 typedef struct uk_efi_runtime_services {
 	uk_efi_tab_hdr_t hdr;
 
