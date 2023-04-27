@@ -35,7 +35,7 @@ opt_hdr:
 	.long	0				/* BaseOfCode */
 
 xhdr_fields:
-	.quad	_base_addr			/* ImageBase */
+	.quad	0x1000000/* ImageBase */
 	.long	__PAGE_SIZE			/* SectionAlignment */
 	.long	__PAGE_SIZE			/* FileAlignment */
 	.short	0				/* MajorOperatingSystemVersion */
