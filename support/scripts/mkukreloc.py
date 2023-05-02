@@ -23,7 +23,7 @@ SEP = r'\s*'
 SYM_EXP = r'[a-zA-z0-9._]+'
 
 # Default values for out load address and the signature of the .uk_reloc
-# section respectively (see include/uk/plat/common/uk_reloc.h)
+# section respectively (see reloc.h)
 BASE_ADDR = 0x0
 UK_RELOC_SIGNATURE = 0xBADB0111
 
@@ -162,13 +162,13 @@ def rela_to_uk_reloc(rela):
     # so only 8 bytes per relocation. Furthermore, all auto-generated
     # 64-bit relocations are based off a reference virtual address so no
     # need for a UK_RELOC_FLAGS_PHYS_REL flag
-    # (see include/uk/plat/common/uk_reloc.h).
+    # (see reloc.h).
     return [offset, value, 8, 0]
 
 # Generic Regex for a uk_reloc generated symbol.
 # If there is a _phys suffix, then the relocation is to be done against
 # a physical address, otherwise, we do not care what suffix the user
-# provided (see include/uk/plat/common/uk_reloc.h).
+# provided (see reloc.h).
 RELOC_ADDR_TYPE = r'[_phys|.]*'
 def get_uk_reloc_sym_exp(_type):
     return (
@@ -218,7 +218,7 @@ def uk_reloc_sym_to_struct(elf, uk_reloc_sym):
     return [offset, value, size, flags]
 
 # A uk_reloc entry has the same definition as `struct uk_reloc`.
-# See include/uk/plat/common/uk_reloc.h.
+# See reloc.h.
 def build_uk_relocs(elf, rela_dyn_secs, max_m_off):
     uk_relocs = [rela_to_uk_reloc(r) for r in rela_dyn_secs]
     uk_reloc_syms = get_nm_syms(elf, get_uk_reloc_sym_exp(r'imm'))
