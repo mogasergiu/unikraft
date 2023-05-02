@@ -35,7 +35,7 @@
 #include <uk/arch/lcpu.h>
 #include <uk/arch/limits.h>
 #include <uk/asm.h>
-#include <arm/arm64/uk_reloc.h>
+#include <arch/reloc.h>
 
 ENTRY(start_mmu)
 	/*

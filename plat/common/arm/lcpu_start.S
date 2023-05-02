@@ -34,7 +34,7 @@
 
  #include <uk/asm.h>
  #include <uk/plat/common/lcpu.h>
- #include <arm/arm64/uk_reloc.h>
+ #include <arch/reloc.h>
 
 .text
 /* void _lcpu_start(lcpu *cpu) */

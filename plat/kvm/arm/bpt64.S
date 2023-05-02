@@ -35,7 +35,7 @@
 #include <uk/arch/lcpu.h>
 #include <uk/arch/paging.h>
 #include <uk/asm.h>
-#include <arm/arm64/uk_reloc.h>
+#include <arch/reloc.h>
 
 #define PTE_BLOCK_DEVICE_nGnRnE	(PTE_ATTR_DEVICE_nGnRnE + PTE_TYPE_BLOCK)
 #define PTE_BLOCK_DEVICE_nGnRE	(PTE_ATTR_DEVICE_nGnRE + PTE_TYPE_BLOCK)

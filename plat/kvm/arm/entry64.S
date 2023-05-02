@@ -34,7 +34,7 @@
 #include <uk/asm.h>
 #include <uk/plat/common/sections.h>
 #include <uk/config.h>
-#include <arm/arm64/uk_reloc.h>
+#include <arch/reloc.h>
 
 /* Prefer using in-image stack, to avoid conflicts when unmapping is done by
  * paging_init (it invalidates our stack)
