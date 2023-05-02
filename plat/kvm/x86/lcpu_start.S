@@ -37,7 +37,7 @@
 #include <uk/config.h>
 #include <uk/asm.h>
 #include <uk/plat/common/lcpu.h>
-#include <x86/uk_reloc.h>
+#include <arch/reloc.h>
 #include <x86/cpu_defs.h>
 #include <kvm-x86/traps.h>
 #include "lcpu_helpers.S"

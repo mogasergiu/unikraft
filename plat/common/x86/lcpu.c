@@ -46,7 +46,7 @@
 
 #include <uk/plat/lcpu.h>
 #include <uk/plat/common/lcpu.h>
-#include <uk/plat/common/uk_reloc.h>
+#include <uk/reloc.h>
 
 #include <string.h>
 #include <errno.h>

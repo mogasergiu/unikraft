@@ -31,7 +31,7 @@
 #include <xen/xen.h>
 #include <xen/elfnote.h>
 #include <uk/asm.h>
-#include <x86/uk_reloc.h>
+#include <arch/reloc.h>
 
 #define ELFNOTE(name, type, desc)           \
     .pushsection .note.name               ; \

@@ -33,7 +33,7 @@
 
 #include <uk/config.h>
 #include <uk/arch/paging.h>
-#include <x86/uk_reloc.h>
+#include <arch/reloc.h>
 
 #define PTE_RO		X86_PTE_PRESENT
 #define PTE_RW		(X86_PTE_PRESENT | X86_PTE_RW)

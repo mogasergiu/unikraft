@@ -36,7 +36,7 @@
 
 #include <uk/config.h>
 #include <uk/asm.h>
-#include <x86/uk_reloc.h>
+#include <arch/reloc.h>
 
 #include <kvm-x86/multiboot.h>
 
