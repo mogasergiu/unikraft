@@ -29,18 +29,61 @@
 #include <uk/falloc.h>
 #endif /* CONFIG_HAVE_PAGING */
 
-#define PLATFORM_MAX_MEM_ADDR 0x100000000 /* 4 GiB */
+extern struct ukplat_memregion_desc bpt_unmap_mrd;
 
 #ifdef CONFIG_HAVE_PAGING
-static int mem_init(void)
+static int ukplat_memregion_insert_unmaps(struct ukplat_bootinfo *bi)
 {
-	return ukplat_paging_init();
+	__vaddr_t unmap_start, unmap_end;
+	int rc;
+
+	unmap_start = PAGE_ALIGN_DOWN(bpt_unmap_mrd.vbase);
+	unmap_end = unmap_start + PAGE_ALIGN_DOWN(bpt_unmap_mrd.len);
+
+	rc = ukplat_memregion_list_insert(&bi->mrds,
+			&(struct ukplat_memregion_desc){
+				.vbase = PAGE_ALIGN_UP(__END),
+				.pbase = 0,
+				.len   = unmap_end - PAGE_ALIGN_UP(__END),
+				.type  = 0,
+				.flags = UKPLAT_MEMRF_UNMAP,
+			});
+	if (unlikely(rc < 0))
+		return rc;
+
+	return ukplat_memregion_list_insert(&bi->mrds,
+			&(struct ukplat_memregion_desc){
+				.vbase = unmap_start,
+				.pbase = 0,
+				.len   = PAGE_ALIGN_DOWN(__BASE_ADDR) -
+					 unmap_start,
+				.type  = 0,
+				.flags = UKPLAT_MEMRF_UNMAP,
+			});
+}
+
+static int mem_init(struct ukplat_bootinfo *bi)
+{
+	int rc;
+
+	rc = ukplat_memregion_insert_unmaps(bi);
+	if (unlikely(rc < 0))
+		return rc;
+
+	rc = ukplat_paging_init();
+	if (unlikely(rc < 0))
+		return rc;
+
+	ukplat_memregion_list_delete(&bi->mrds, 0);
+	ukplat_memregion_list_delete(&bi->mrds, 0);
+
+	return 0;
 }
 #else /* CONFIG_HAVE_PAGING */
-static int mem_init(void)
+static int mem_init(struct ukplat_bootinfo *bi)
 {
-	struct ukplat_bootinfo *bi = ukplat_bootinfo_get();
 	struct ukplat_memregion_desc *mrdp;
+	__vaddr_t unmap_end;
 	int i;
 
 	/* The static boot page table maps only the first 4 GiB. Remove all
@@ -48,24 +91,25 @@ static int mem_init(void)
 	 * heap. Start from the tail as the memory list is ordered by address.
 	 * We can stop at the first area that is completely in the mapped area.
 	 */
+	unmap_end = PAGE_ALIGN_DOWN(bpt_unmap_mrd.vbase + bpt_unmap_mrd.len);
 	for (i = (int)bi->mrds.count - 1; i >= 0; i--) {
 		ukplat_memregion_get(i, &mrdp);
-		if (mrdp->vbase >= PLATFORM_MAX_MEM_ADDR) {
+		if (mrdp->vbase >= unmap_end) {
 			/* Region is outside the mapped area */
 			uk_pr_info("Memory %012lx-%012lx outside mapped area\n",
 				   mrdp->vbase, mrdp->vbase + mrdp->len);
 
 			if (mrdp->type == UKPLAT_MEMRT_FREE)
 				ukplat_memregion_list_delete(&bi->mrds, i);
-		} else if (mrdp->vbase + mrdp->len > PLATFORM_MAX_MEM_ADDR) {
+		} else if (mrdp->vbase + mrdp->len > unmap_end) {
 			/* Region overlaps with unmapped area */
 			uk_pr_info("Memory %012lx-%012lx outside mapped area\n",
-				   PLATFORM_MAX_MEM_ADDR,
+				   unmap_end,
 				   mrdp->vbase + mrdp->len);
 
 			if (mrdp->type == UKPLAT_MEMRT_FREE)
 				mrdp->len -= (mrdp->vbase + mrdp->len) -
-						PLATFORM_MAX_MEM_ADDR;
+					     unmap_end;
 
 			/* Since regions are non-overlapping and ordered, we
 			 * can stop here, as the next region would be fully
@@ -162,7 +206,7 @@ void _ukplat_entry(struct lcpu *lcpu, struct ukplat_bootinfo *bi)
 	bstack = (void *)((__uptr)bstack + __STACK_SIZE);
 
 	/* Initialize memory */
-	rc = mem_init();
+	rc = mem_init(bi);
 	if (unlikely(rc))
 		UK_CRASH("Mem init failed: %d\n", rc);
 

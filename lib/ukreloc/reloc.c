@@ -39,14 +39,14 @@ static inline unsigned long get_rt_baddr(void)
 
 #define ukreloc_crash(s)				ukplat_crash()
 
-static __u64 __section(".ukreloc") __used ukreloc_sec;
+extern struct ukreloc_hdr _ukreloc_start[];
 
 static inline struct ukreloc_hdr *get_ukreloc_hdr()
 {
 	struct ukreloc_hdr *ur_hdr;
 
-	ur_hdr = (struct ukreloc_hdr *)&ukreloc_sec;
-	if (unlikely(!ur_hdr) &&
+	ur_hdr = _ukreloc_start;
+	if (unlikely(!ur_hdr) ||
 	    unlikely(ur_hdr->signature != UKRELOC_SIGNATURE))
 		return NULL;
 

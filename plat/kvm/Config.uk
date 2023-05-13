@@ -14,13 +14,46 @@ menuconfig PLAT_KVM
 
 if (PLAT_KVM)
 
-if (ARCH_X86_64)
+choice
+	prompt "Booting environment"
+	default KVM_BOOT_PROTO_MULTIBOOT
+
+config KVM_BOOT_EFI_STUB
+	bool "Boot from UEFI"
+	depends on KVM_VMM_QEMU && !KVM_VMM_FIRECRACKER
+	select OPTIMIZE_PIE
+	help
+		Prepend a fake, architecture specific, PE header to the
+		final image, patched by mkefi.py. The new entry point
+		will be architecture specific initial stub, followed by
+		an architecture generic EFI stub that sets up everything
+		required to be able to enter a valid initial state of the
+		platform.
+
+if KVM_BOOT_EFI_STUB
+config KVM_BOOT_EFI_STUB_CMDLINE_FNAME
+	string "Name of the command line arguments file"
+	default "$(UK_NAME).cmdl"
+
+config KVM_BOOT_EFI_STUB_INITRD_FNAME
+	string "Name of the initial RAM disk file"
+	default "$(UK_NAME).initrd"
+
+config KVM_BOOT_EFI_STUB_DTB_FNAME
+	string "Name of the Devicetree Blob file"
+	default "$(UK_NAME).dtb"
+endif
 
 config KVM_BOOT_PROTO_MULTIBOOT
-	bool
+	bool "Multiboot Boot Protocol Version 1"
+	depends on KVM_VMM_QEMU && !KVM_VMM_FIRECRACKER
+	select ELF64_TO_32
 
 config KVM_BOOT_PROTO_LXBOOT
-	bool
+	bool "Linux 64-bit Boot Protocol"
+	depends on !KVM_VMM_QEMU && KVM_VMM_FIRECRACKER
+
+endchoice
 
 choice
 	prompt "Virtual Machine Monitor"
@@ -28,14 +61,12 @@ choice
 
 config KVM_VMM_QEMU
 	bool "QEMU"
-	select KVM_BOOT_PROTO_MULTIBOOT
 
 config KVM_VMM_FIRECRACKER
 	bool "Firecracker"
 	select KVM_BOOT_PROTO_LXBOOT
 
 endchoice
-endif
 
 menu "Console Options"
 

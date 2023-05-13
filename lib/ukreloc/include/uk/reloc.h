@@ -42,6 +42,11 @@
 .popsection
 .endm
 
+.macro ur_sym	sym:req, val:req
+.globl \sym
+.set \sym\()_\@\(), \val
+.endm
+
 /* If CONFIG_OPTIMIZE_PIE is enabled, this will create a ukreloc symbol that
  * mkukreloc.py will process. Example usage:
  * ```
@@ -65,10 +70,9 @@
  * @param bytes The size in bytes of the relocation
  * @param phys Optional, if value is _phys, UKRELOC_FLAGS_PHYS_REL is set
  */
-.macro ur_data type:req, sym:req, bytes:req, phys
+.macro ur_data type:req, sym:req, bytes:req, flags
 #ifdef CONFIG_OPTIMIZE_PIE
-.globl \sym\()_ukreloc_data\bytes\()\phys\()
-.set \sym\()_ukreloc_data\bytes\()\phys\(), .
+	ur_sym	\sym\()_ukreloc_data\bytes\()\flags\(), .
 	.\type	UKRELOC_PLACEHOLDER
 	ur_sec_updt	\sym, .
 #else
@@ -102,14 +106,14 @@
 .macro ur_pte pte_sym:req, pte:req
 #ifdef CONFIG_OPTIMIZE_PIE
 	ur_data	quad, \pte_sym, 8, _phys
-.globl \pte_sym\()_ukreloc_pte_attr0
-.set \pte_sym\()_ukreloc_pte_attr0, \pte
+	ur_sym	\pte_sym\()_ukreloc_pte_attr0, \pte
 #else
 	ur_data	quad, (\pte_sym + \pte), 8, _phys
 #endif
 .endm
 
 #ifndef CONFIG_OPTIMIZE_PIE
+.align 4
 do_ukreloc:
 	ret
 #endif

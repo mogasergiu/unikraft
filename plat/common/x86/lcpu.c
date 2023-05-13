@@ -109,8 +109,6 @@ void __noreturn lcpu_arch_jump_to(void *sp, ukplat_lcpu_entry_t entry)
  * corresponding boot code somewhere in the first 1 MiB. We copy the trampoline
  * code to the target address during MP initialization.
  */
-
-#ifdef CONFIG_OPTIMIZE_PIE
 IMPORT_START16_UKRELOC_SYM(gdt32_ptr, 2, MOV);
 IMPORT_START16_UKRELOC_SYM(gdt32, 4, DATA);
 IMPORT_START16_UKRELOC_SYM(lcpu_start16, 2, MOV);
@@ -129,9 +127,9 @@ static void ukreloc_mp_init(void)
 
 	for (i = 0; i < ARRAY_SIZE(x86_start16_relocs); i++)
 		apply_ukreloc(&x86_start16_relocs[i],
-			       (__u64)x86_start16_addr +
-			       x86_start16_relocs[i].r_addr,
-			       (void *)x86_start16_addr);
+			      (__u64)x86_start16_addr +
+			      x86_start16_relocs[i].r_addr,
+			      (void *)x86_start16_addr);
 
 	/* Unlike the other entries, lcpu_start32 must stay the same
 	 * as it is not part of the start16 section
@@ -143,7 +141,6 @@ static void ukreloc_mp_init(void)
 		       (__u64)lcpu_start32,
 		       (void *)x86_start16_addr);
 }
-#endif
 
 int lcpu_arch_mp_init(void *arg __unused)
 {
@@ -215,9 +212,7 @@ int lcpu_arch_mp_init(void *arg __unused)
 	memcpy((void *)x86_start16_addr, &x86_start16_begin,
 	       X86_START16_SIZE);
 
-#ifdef CONFIG_OPTIMIZE_PIE
 	ukreloc_mp_init();
-#endif
 
 	uk_pr_debug("Copied AP 16-bit boot code to 0x%"__PRIvaddr"\n",
 		    x86_start16_addr);

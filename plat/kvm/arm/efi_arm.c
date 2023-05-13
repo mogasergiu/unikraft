@@ -1,6 +1,6 @@
 #include <uk/plat/common/sections.h>
 #include <uk/plat/common/bootinfo.h>
-#include <uk/plat/common/efi.h>
+#include <kvm/efi.h>
 #include <uk/arch/paging.h>
 #include <uk/plat/lcpu.h>
 
@@ -48,7 +48,7 @@ uk_efi_status_t uk_efi_jmp_to_kern()
 
 	start_mmu();
 
-	_libkvmplat_start(ukplat_bootinfo_get()->dtb);
+	_ukplat_entry(ukplat_bootinfo_get());
 
 	return -1;
 }

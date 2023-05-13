@@ -50,7 +50,7 @@ struct ukplat_bootinfo {
 	struct ukplat_memregion_list mrds;
 } __packed __align(__SIZEOF_LONG__);
 
-UK_CTASSERT(sizeof(struct ukplat_bootinfo) == 72);
+UK_CTASSERT(sizeof(struct ukplat_bootinfo) == 80);
 
 #ifdef CONFIG_UKPLAT_MEMRNAME
 #if __SIZEOF_LONG__ == 8

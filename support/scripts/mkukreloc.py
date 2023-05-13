@@ -173,7 +173,7 @@ def rela_to_ukreloc(rela):
 # If there is a _phys suffix, then the relocation is to be done against
 # a physical address, otherwise, we do not care what suffix the user
 # provided (see reloc.h).
-RELOC_ADDR_TYPE = r'[_phys|.]*'
+RELOC_ADDR_TYPE = r'[_phys].*'
 def get_ukreloc_sym_exp(_type):
     return (
         r'(' + SYM_EXP + r')' +

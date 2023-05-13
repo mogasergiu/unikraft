@@ -36,7 +36,7 @@
 #include <x86/acpi/acpi.h>
 #include <string.h>
 #include <errno.h>
-#include <uk/plat/common/efi.h>
+#include <kvm/efi.h>
 #include <uk/plat/common/bootinfo.h>
 
 #define RSDP10_LEN		20
@@ -134,7 +134,7 @@ static struct acpi_rsdp *get_efi_st_rsdp()
 	return rsdp;
 }
 
-static struct acpi_rsdp *get_ebda_rsdp()
+static struct acpi_rsdp *get_bios_rom_rsdp()
 {
 	__paddr_t ptr;
 
@@ -157,7 +157,7 @@ static struct acpi_rsdp *get_rsdp()
 	if (rsdp)
 		return rsdp;
 
-	return get_ebda_rsdp();
+	return get_bios_rom_rsdp();
 }
 
 /*

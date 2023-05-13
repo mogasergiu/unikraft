@@ -87,11 +87,9 @@ ENTRY(_libkvmplat_entry)
 	/* Set the context id */
 	msr contextidr_el1, xzr
 
-#ifdef CONFIG_OPTIMIZE_PIE
 	mov     x0, xzr
 	mov     x1, xzr
 	bl      do_ukreloc
-#endif
 
 	/* Setup exception vector table address before enable MMU */
 	ur_ldr  x29, vector_table
@@ -102,7 +100,9 @@ ENTRY(_libkvmplat_entry)
 
 	/* Load dtb address to x0 as a parameter */
 	ur_ldr  x0, _dtb
+	bl ukplat_bootinfo_fdt_setup
 
-	b _libkvmplat_start
+	bl ukplat_bootinfo_get
+	b _ukplat_entry
 END(_libkvmplat_entry)
 
