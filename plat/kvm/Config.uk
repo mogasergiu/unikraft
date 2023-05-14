@@ -25,6 +25,10 @@ config KVM_BOOT_PROTO_LXBOOT
 	bool "Linux 64-bit Boot Protocol"
 	depends on !KVM_VMM_QEMU && KVM_VMM_FIRECRACKER && ARCH_X86_64
 
+config KVM_BOOT_QEMU_VIRT
+	bool "Default QEMU Virt environment"
+	depends on KVM_VMM_QEMU && !KVM_VMM_FIRECRACKER && ARCH_ARM_64
+
 config KVM_BOOT_EFI_STUB
 	bool "Boot from UEFI"
 	depends on KVM_VMM_QEMU && !KVM_VMM_FIRECRACKER
