@@ -22,7 +22,8 @@ config KVM_BOOT_PROTO_MULTIBOOT
 	depends on KVM_VMM_QEMU && !KVM_VMM_FIRECRACKER && ARCH_X86_64
 
 config KVM_BOOT_PROTO_LXBOOT
-	bool
+	bool "Linux 64-bit Boot Protocol"
+	depends on !KVM_VMM_QEMU && KVM_VMM_FIRECRACKER && ARCH_X86_64
 
 config KVM_BOOT_EFI_STUB
 	bool "Boot from UEFI"
