@@ -1,6 +1,6 @@
 #include <uk/plat/common/sections.h>
 #include <uk/plat/common/bootinfo.h>
-#include <uk/plat/common/efi.h>
+#include <kvm/efi.h>
 #include <uk/arch/paging.h>
 #include <uk/plat/lcpu.h>
 
@@ -14,10 +14,8 @@ static inline void uk_efi_mask_daif()
 	__asm __volatile( "msr daifset, #15" : : : "memory" );
 }
 
-static inline void uk_efi_set_sp_el1(void *sp)
-{
+#define uk_efi_set_sp_el1(sp)							\
 	__asm__ __volatile__("mov sp, %0\n" ::"r" (sp));
-}
 
 static __u8 __align(16) bootstack[4096];
 
@@ -44,11 +42,11 @@ uk_efi_status_t uk_efi_jmp_to_kern()
 	SYSREG_WRITE64(sp_el0, 0);
 	SYSREG_WRITE64(tpidr_el0, 0);
 
-	uk_efi_set_sp_el1(bootstack + 4096);
-
 	start_mmu();
 
-	_libkvmplat_start(ukplat_bootinfo_get()->dtb);
+	uk_efi_set_sp_el1(bootstack + 4096);
+
+	_ukplat_entry(ukplat_bootinfo_get());
 
 	return -1;
 }

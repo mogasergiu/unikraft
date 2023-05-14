@@ -10,20 +10,29 @@
 #include <uk/plat/memory.h>
 #include <uk/reloc.h>
 
+/* `lt_baddr` contains the link time absolute symbol value of
+ * `_base_addr`, while `rt_baddr` will end up, through `get_rt_baddr()`,
+ * to contain the current, runtime, base address of the loaded image.
+ * This works because `lt_baddr` will make the linker generate an
+ * absolute 64-bit value relocation, that will be statically resolved
+ * anyway  in the final binary.
+ */
+static unsigned long lt_baddr = __BASE_ADDR;
+static unsigned long rt_baddr;
+
 /* Use `get_rt_baddr()` to obtain the runtime base address */
 #if defined(__X86_64__)
 
 /* For x86, this is resolved to a `%rip` relative access anyway */
-static inline unsigned long get_rt_baddr(void)
+static inline unsigned long get_rt_addr(unsigned long sym)
 {
-	return	__BASE_ADDR;
+	return	sym;
 }
+
 #elif defined(__ARM_64__)
 
-static inline unsigned long get_rt_baddr(void)
+static inline unsigned long get_rt_addr(unsigned long sym)
 {
-	unsigned long rt_baddr;
-
 	__asm__ __volatile__(
 		"adrp	x0, _base_addr\n\t"
 		"add	x0, x0, :lo12:_base_addr\n\t"
@@ -33,20 +42,19 @@ static inline unsigned long get_rt_baddr(void)
 		: "x0", "memory"
 	);
 
-	return rt_baddr;
+	return (sym - lt_baddr) + rt_baddr;
 }
 #endif
 
-#define ukreloc_crash(s)				ukplat_crash()
+#define ukreloc_crash(s)				ukplat_halt()
 
-static __u64 __section(".ukreloc") __used ukreloc_sec;
 
 static inline struct ukreloc_hdr *get_ukreloc_hdr()
 {
 	struct ukreloc_hdr *ur_hdr;
 
-	ur_hdr = (struct ukreloc_hdr *)&ukreloc_sec;
-	if (unlikely(!ur_hdr) &&
+	ur_hdr = (struct ukreloc_hdr *)get_rt_addr(__UKRELOC_START);
+	if (unlikely(!ur_hdr) ||
 	    unlikely(ur_hdr->signature != UKRELOC_SIGNATURE))
 		return NULL;
 
@@ -55,16 +63,8 @@ static inline struct ukreloc_hdr *get_ukreloc_hdr()
 
 void __used do_ukreloc(__paddr_t r_paddr, __vaddr_t r_vaddr)
 {
-	/* `lt_baddr` contains the link time absolute symbol value of
-	 * `_base_addr`, while `rt_baddr` will end up, through `get_rt_baddr()`,
-	 * to contain the current, runtime, base address of the loaded image.
-	 * This works because `lt_baddr` will make the linker generate an
-	 * absolute 64-bit value relocation, that will be statically resolved
-	 * anyway  in the final binary.
-	 */
-	static unsigned long lt_baddr = __BASE_ADDR;
-	unsigned long rt_baddr, bkp_lt_baddr;
 	struct ukplat_memregion_desc *mrdp;
+	unsigned long bkp_lt_baddr;
 	struct ukreloc_hdr *ur_hdr;
 	struct ukreloc *ur;
 	__u64 val;
@@ -74,7 +74,7 @@ void __used do_ukreloc(__paddr_t r_paddr, __vaddr_t r_vaddr)
 	if (!ur_hdr)
 		ukreloc_crash("Invalid UKRELOC signature");
 
-	rt_baddr = get_rt_baddr();
+	rt_baddr = get_rt_addr(__BASE_ADDR);
 	if (r_paddr == 0)
 		r_paddr = (__paddr_t)rt_baddr;
 	if (r_vaddr == 0)

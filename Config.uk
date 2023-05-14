@@ -102,41 +102,6 @@ config OPTIMIZE_PIE
 	help
 		Build the Unikernel as a static PIE.
 
-config MAX_BOOTINFO_MRD_COUNT
-	int "Maximum amount of Bootinfo Memory Region Descriptors"
-	default 128
-	help
-		The number of memory region descriptors depends on the platform. Some
-		may have less than 100, while others may have 100's of memory region
-		descriptors. In order to cope with this, the user is able to configure
-		the amount of statically allocated space in the image made available
-		for storing memory region descriptors' metadata.
-
-menuconfig UK_EFI_STUB
-	bool "Turn the final Unikernel image into a UEFI application"
-	default n
-	help
-		Prepend a fake, architecture specific, PE header to the
-		final image, patched by mkefi.py. The new entry point
-		will be architecture specific initial stub, followed by
-		an architecture generic EFI stub that sets up everything
-		required to be able to enter a valid initial state of the
-		platform.
-
-if UK_EFI_STUB
-config UK_EFI_STUB_CMDLINE_FNAME
-	string "Name of the command line arguments file"
-	default "$(UK_NAME).cmdl"
-
-config UK_EFI_STUB_INITRD_FNAME
-	string "Name of the initial RAM disk file"
-	default "$(UK_NAME).initrd"
-
-config UK_EFI_STUB_DTB_FNAME
-	string "Name of the Devicetree Blob file"
-	default "$(UK_NAME).dtb"
-endif
-
 choice
 	prompt "Debug information level"
 	default DEBUG_SYMBOLS_LVL3
@@ -193,18 +158,6 @@ config OPTIMIZE_COMPRESS
 	help
 		Create compressed images. Please note that not all platforms
 		support compressing.
-
-if PLAT_KVM && ARCH_X86_64
-
-config ELF64_TO_32
-	bool "Convert the Unikernel's ELF64 headers to their ELF32 equivalents"
-	default n
-	help
-		Convert the Unikernel's ELF64 ELF Header, Program Headers and Section
-		Headers to their ELF32 equivalents. This is mainly used to fool
-		loaders that require an ELF32 into loading an ELF64.
-
-endif
 
 config RECORD_BUILDTIME
 	bool "Keep track of Building time"

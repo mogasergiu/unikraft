@@ -14,9 +14,10 @@ PHDRS
 SECTIONS
 {
 	. = ALIGN(__PAGE_SIZE);
-	_ukreloc_start = .;
 	.ukreloc :
 	{
+		_ukreloc_start = .;
+		. += 4;
 		KEEP(*(.ukreloc))
 	} :data
 

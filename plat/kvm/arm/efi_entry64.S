@@ -3,7 +3,7 @@
 #include <uk/plat/common/pe.h>
 
 .section .text
-uk_efi_entry64:
+ENTRY(uk_efi_entry64)
 	stp	x0, x1, [sp, #16]
 
 	mov	x0, xzr
@@ -16,3 +16,4 @@ uk_efi_entry64:
 uk_efi_fail:
 	wfi
 	b	uk_efi_fail
+END(uk_efi_entry64)

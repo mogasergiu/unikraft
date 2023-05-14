@@ -1,44 +1,13 @@
 #include <uk/plat/common/bootinfo.h>
-#include <uk/plat/common/efi.h>
+#include <kvm/efi.h>
 
-/* As per UEFI specification, the call to the get memory map routine following
+/* As per UEFI specification, the call to the GetMemoryMap routine following
  * the dummy one, must have a surplus amount of memory region descriptors in
- * size. Usually, 2 to 4 is enough, but allocate 10, just in case. We do not
- * care afterwards anyway.
+ * size. Usually, 2 to 4 is enough, but allocate 10, just in case.
  */
 #define UK_EFI_MAXPATHLEN					4096
 #define UK_EFI_SURPLUS_MEM_DESC_COUNT				10
 #define uk_efi_crash(str)					ukplat_crash()
-
-/* For x86 we must make sure that no zone below the 1MiB ends up in the memory
- * region descriptors list. If a memory region happens to have a part below it
- * as well as above it, keep only what is above.
- */
-#if defined(__X86_64__)
-#define PLATFORM_MIN_MEM_ADDR 0x00000100000 /* 1 MiB */
-#elif defined(__ARM_64__)
-#define PLATFORM_MIN_MEM_ADDR 0x00040000000 /* 1 GiB */
-#endif
-static int uk_efi_arch_adjust_md(uk_efi_mem_desc_t *md) {
-	__paddr_t pstart, pend;
-	__sz len;
-
-	len = md->number_of_pages * UK_EFI_PAGE_SIZE;
-	pstart = md->physical_start;
-	pend = pstart + len;
-	if (pstart < PLATFORM_MIN_MEM_ADDR)
-		if(pend > PLATFORM_MIN_MEM_ADDR) {
-			len -= PLATFORM_MIN_MEM_ADDR - md->physical_start;
-			md->physical_start = PLATFORM_MIN_MEM_ADDR;
-			md->number_of_pages = len / UK_EFI_PAGE_SIZE;
-
-			return 0;
-		} else {
-			return -EINVAL;
-		}
-
-	return 0;
-}
 
 uk_efi_sys_tab_t *uk_efi_st;
 uk_efi_runtime_services_t *uk_efi_rs;
@@ -93,11 +62,7 @@ static inline void uk_efi_init_vars(uk_efi_hndl_t self_hndl,
 static int uk_efi_md_to_bi_mrd(uk_efi_mem_desc_t *const md,
 				 struct ukplat_memregion_desc *const mrd)
 {
-	int rc;
-
-	rc = uk_efi_arch_adjust_md(md);
-	if (rc < 0)
-		return rc;
+	__paddr_t start, end;
 
 	switch (md->type) {
 	case UK_EFI_RESERVED_MEMORY_TYPE:
@@ -110,7 +75,11 @@ static int uk_efi_md_to_bi_mrd(uk_efi_mem_desc_t *const md,
 	case UK_EFI_PERSISTENT_MEMORY:
 		mrd->type = UKPLAT_MEMRT_RESERVED;
 
+#if defined(__X86_64__)
 		mrd->flags = UKPLAT_MEMRF_READ | UKPLAT_MEMRF_MAP;
+#elif defined(__ARM_64__)
+		mrd->flags = UKPLAT_MEMRF_READ;
+#endif
 
 		break;
 	case UK_EFI_RUNTIME_SERVICES_CODE:
@@ -133,11 +102,16 @@ static int uk_efi_md_to_bi_mrd(uk_efi_mem_desc_t *const md,
 		break;
 	}
 
-	mrd->pbase = md->physical_start;
-	mrd->vbase = mrd->pbase;
-	mrd->len = md->number_of_pages * UK_EFI_PAGE_SIZE;
+	start = MAX(md->physical_start, __PAGE_SIZE);
+	end = md->physical_start + md->number_of_pages * UK_EFI_PAGE_SIZE;
+	if (unlikely(end <= start || end - start < __PAGE_SIZE))
+		return -ENOMEM;
 
-	return rc;
+	mrd->pbase = start;
+	mrd->vbase = start;
+	mrd->len = end - start;
+
+	return 0;
 }
 
 static void uk_efi_get_mmap(uk_efi_mem_desc_t **map, uk_efi_uintn_t *map_sz,
@@ -214,9 +188,6 @@ static void uk_efi_rt_md_to_bi_mrds(struct ukplat_memregion_desc **const rt_mrds
 		if (!(mat_md->attribute & UK_EFI_MEMORY_RUNTIME))
 			continue;
 
-		if (uk_efi_arch_adjust_md(mat_md) < 0)
-			continue;
-
 		rt_mrd = *rt_mrds + i;
 		rt_mrd->pbase = mat_md->physical_start;
 		rt_mrd->len = mat_md->number_of_pages * UK_EFI_PAGE_SIZE;
@@ -244,10 +215,20 @@ static void uk_efi_setup_bootinfo_mrds(struct ukplat_bootinfo *const bi)
 	uk_efi_uintn_t map_sz, desc_sz;
 	uk_efi_status_t status;
 	__u32 rt_mrds_count, i;
+	int rc;
+
+#if defined(__X86_64__)
+	rc = ukplat_memregion_list_insert_legacy_hi_mem(&bi->mrds);
+	if (unlikely(rc < 0))
+		uk_efi_crash("Failed to insert legacy high memory region.");
+#endif
 
 	uk_efi_rt_md_to_bi_mrds(&rt_mrds, &rt_mrds_count);
-	for (i = 0; i < rt_mrds_count; i++)
-		ukplat_memregion_list_insert(&bi->mrds, &rt_mrds[i]);
+	for (i = 0; i < rt_mrds_count; i++) {
+		rc = ukplat_memregion_list_insert(&bi->mrds, &rt_mrds[i]);
+		if (unlikely(rc < 0))
+			uk_efi_crash("Failed to insert rt_mrd");
+	}
 
 	status = uk_efi_bs->free_pool(rt_mrds);
 	if (status != UK_EFI_SUCCESS)
@@ -261,10 +242,16 @@ static void uk_efi_setup_bootinfo_mrds(struct ukplat_bootinfo *const bi)
 		if (uk_efi_md_to_bi_mrd(md, &mrd) < 0)
 			continue;
 
-		ukplat_memregion_list_insert(&bi->mrds,  &mrd);
+		rc = ukplat_memregion_list_insert(&bi->mrds,  &mrd);
+		if (unlikely(rc < 0))
+			uk_efi_crash("Failed to insert mrd");
 	}
 
 	ukplat_memregion_list_coalesce(&bi->mrds);
+
+#if defined(__X86_64__)
+	ukplat_memregion_alloc_sipi_vect(&bi->mrds);
+#endif
 }
 
 static uk_efi_ld_img_hndl_t* uk_efi_get_uk_img_hndl()
@@ -361,7 +348,7 @@ static void uk_efi_setup_bootinfo_cmdl(struct ukplat_bootinfo *const bi)
 	/* We can either have the command line provided by the user when this
 	 * very specific instance of the image was launched, in which case this
 	 * one takes priority, or we can have it provided through
-	 * CONFIG_UK_EFI_STUB_CMDLINE_PATH as a path on the same device.
+	 * CONFIG_KVM_BOOT_EFI_STUB_CMDLINE_PATH as a path on the same device.
 	 */
 	if (uk_img_hndl->load_options && uk_img_hndl->load_options_size) {
 		len = (uk_img_hndl->load_options_size >> 1) + 1;
@@ -374,11 +361,11 @@ static void uk_efi_setup_bootinfo_cmdl(struct ukplat_bootinfo *const bi)
 		/* Update  actual size */
 		len = utf16_to_ascii(uk_img_hndl->load_options, cmdl);
 	} else {
-		if (sizeof(CONFIG_UK_EFI_STUB_CMDLINE_FNAME) <= 1)
+		if (sizeof(CONFIG_KVM_BOOT_EFI_STUB_CMDLINE_FNAME) <= 1)
 			return;
 
 		uk_efi_read_file(uk_img_hndl->device_handle,
-				 "\\EFI\\BOOT\\"CONFIG_UK_EFI_STUB_CMDLINE_FNAME,
+				 "\\EFI\\BOOT\\"CONFIG_KVM_BOOT_EFI_STUB_CMDLINE_FNAME,
 				 &cmdl, &len);
 	}
 
@@ -390,6 +377,7 @@ static void uk_efi_setup_bootinfo_cmdl(struct ukplat_bootinfo *const bi)
 	ukplat_memregion_list_insert(&bi->mrds,  &mrd);
 
 	bi->cmdline = (__u64)cmdl;
+	bi->cmdline_len = len;
 }
 
 static void uk_efi_setup_bootinfo_initrd(struct ukplat_bootinfo *const bi)
@@ -399,13 +387,13 @@ static void uk_efi_setup_bootinfo_initrd(struct ukplat_bootinfo *const bi)
 	char *initrd;
 	__sz len;
 
-	if (sizeof(CONFIG_UK_EFI_STUB_INITRD_FNAME) <= 1)
+	if (sizeof(CONFIG_KVM_BOOT_EFI_STUB_INITRD_FNAME) <= 1)
 		return;
 
 	uk_img_hndl = uk_efi_get_uk_img_hndl();
 
 	uk_efi_read_file(uk_img_hndl->device_handle,
-			 "\\EFI\\BOOT\\"CONFIG_UK_EFI_STUB_INITRD_FNAME,
+			 "\\EFI\\BOOT\\"CONFIG_KVM_BOOT_EFI_STUB_INITRD_FNAME,
 			 &initrd, &len);
 
 	mrd.pbase = (__paddr_t) initrd;
@@ -423,13 +411,13 @@ static void uk_efi_setup_bootinfo_dtb(struct ukplat_bootinfo *const bi)
 	char *dtb;
 	__sz len;
 
-	if (sizeof(CONFIG_UK_EFI_STUB_DTB_FNAME) <= 1)
+	if (sizeof(CONFIG_KVM_BOOT_EFI_STUB_DTB_FNAME) <= 1)
 		return;
 
 	uk_img_hndl = uk_efi_get_uk_img_hndl();
 
 	uk_efi_read_file(uk_img_hndl->device_handle,
-			 "\\EFI\\BOOT\\"CONFIG_UK_EFI_STUB_DTB_FNAME,
+			 "\\EFI\\BOOT\\"CONFIG_KVM_BOOT_EFI_STUB_DTB_FNAME,
 			 &dtb, &len);
 
 	mrd.pbase = (__paddr_t) dtb;
@@ -445,23 +433,19 @@ static void uk_efi_setup_bootinfo_dtb(struct ukplat_bootinfo *const bi)
 static void uk_efi_setup_bootinfo()
 {
 	struct ukplat_bootinfo *bi;
-	const char bl[] = "UK_EFI_STUB";
+	const char bl[] = "KVM_BOOT_EFI_STUB";
 	const char bp[] = "EFI";
 
 	bi = ukplat_bootinfo_get();
 	if (unlikely(!bi))
 		uk_efi_crash("Failed to get bootinfo\n");
 
+	memcpy(bi->bootloader, bl, sizeof(bl));
+	memcpy(bi->bootprotocol, bp, sizeof(bp));
+
 	uk_efi_setup_bootinfo_cmdl(bi);
-
-	uk_efi_bs->copy_mem(bi->bootloader, bl, sizeof(bl));
-
-	uk_efi_bs->copy_mem(bi->bootprotocol, bp, sizeof(bp));
-
 	uk_efi_setup_bootinfo_initrd(bi);
-
 	uk_efi_setup_bootinfo_dtb(bi);
-
 	uk_efi_setup_bootinfo_mrds(bi);
 
 	bi->efi_st = (__u64)uk_efi_st;
@@ -505,13 +489,9 @@ uk_efi_status_t __uk_efi_api uk_efi_main(uk_efi_hndl_t self_hndl,
 					 uk_efi_sys_tab_t *sys_tab)
 {
 	uk_efi_init_vars(self_hndl, sys_tab);
-
 	uk_efi_cls();
-
 	uk_efi_setup_bootinfo();
-
 	uk_efi_reset_attack_mitigation_enable();
-
 	uk_efi_exit_bs();
 
 	return uk_efi_jmp_to_kern();

@@ -112,6 +112,63 @@ ukplat_memregion_list_insert(struct ukplat_memregion_list *list,
 	return (int)i;
 }
 
+#if defined(__X86_64__)
+#define	X86_HI_MEM_START		0xA0000
+#define X86_HI_MEM_LEN			0x50000
+
+static inline int
+ukplat_memregion_list_insert_legacy_hi_mem(struct ukplat_memregion_list *list)
+{
+	/* Note that we are mapping it as writable as well to cope with the
+	 * potential existence of the VGA framebuffer/SMM shadow memory.
+	 * This is fine, as writes to the mapped BIOS ROM in non-SMM are
+	 * ignored by the MCH once the BIOS gets towards the end of POST
+	 * by writing PCI config cycles to Programmable Attribute Map
+	 * registers mapped as a PCI device.
+	 */
+	return ukplat_memregion_list_insert(list,
+				&(struct ukplat_memregion_desc){
+					.vbase = (__vaddr_t)X86_HI_MEM_START,
+					.pbase = (__paddr_t)X86_HI_MEM_START,
+					.len = X86_HI_MEM_LEN,
+					.type = UKPLAT_MEMRT_RESERVED,
+					.flags = UKPLAT_MEMRF_READ  |
+						 UKPLAT_MEMRF_WRITE |
+						 UKPLAT_MEMRF_MAP,
+				});
+}
+
+#if defined(CONFIG_HAVE_SMP)
+extern __uptr x86_start16_addr; /* target address */
+extern void *x86_start16_begin[];
+extern void *x86_start16_end[];
+
+static inline int
+ukplat_memregion_alloc_sipi_vect(struct ukplat_memregion_list *list)
+{
+	__sz len;
+
+	len = (__sz)((__uptr)x86_start16_end - (__uptr)x86_start16_begin);
+	x86_start16_addr = (__uptr)ukplat_memregion_alloc(len,
+							  UKPLAT_MEMRT_RESERVED,
+							  UKPLAT_MEMRF_READ  |
+							  UKPLAT_MEMRF_WRITE |
+							  UKPLAT_MEMRF_MAP);
+
+	if (unlikely(!x86_start16_addr || x86_start16_addr >= X86_HI_MEM_START))
+		return -ENOMEM;
+
+	return 0;
+}
+#else
+static inline int
+ukplat_memregion_alloc_sipi_vect(struct ukplat_memregion_list *__unused list)
+{
+	return 0;
+}
+#endif
+#endif
+
 /**
  * Insert a new region into the memory region list. This extends
  * ukplat_memregion_list_insert to carve out the area of any pre-existing

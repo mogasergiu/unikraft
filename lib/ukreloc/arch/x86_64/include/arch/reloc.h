@@ -35,8 +35,7 @@
  * @param bytes The size in bytes of the relocation
  * @param phys Optional, if value is _phys, UKRELOC_FLAGS_PHYS_REL is set
  */
-
-.macro ur_mov sym:req, reg:req, bytes:req, phys
+.macro ur_mov sym:req, reg:req, bytes:req, flags
 #ifdef CONFIG_OPTIMIZE_PIE
 /* UKRELOC_PLACEHODER is 16 bytes, so in 64-bit code we must force a `movabs`
  * to ensure that the last amount of opcodes are meant for the immediate
@@ -47,8 +46,7 @@
 .ifgt  (8 - \bytes)
 	mov	$UKRELOC_PLACEHOLDER, \reg
 .endif
-.globl \sym\()_ukreloc_imm\bytes\()\phys\()
-.set \sym\()_ukreloc_imm\bytes\()\phys\(), . - \bytes
+	ur_sym	\sym\()_ukreloc_imm\bytes\()\flags\(), (. - \bytes)
 	nop
 	ur_sec_updt	\sym, (. - \bytes)
 #else
@@ -56,7 +54,7 @@
 #endif
 .endm
 
-#define SAVE_REG32_COUNT	6
+#define SAVE_REG32_COUNT				6
 
 /* Expects the lower 32 bits of the base virtual address in %edi
  * and the higher 32 bt in %esi (hopefully a KASLR randomized value).

@@ -1,5 +1,5 @@
 #include <uk/plat/common/bootinfo.h>
-#include <uk/plat/common/efi.h>
+#include <kvm/efi.h>
 #include <uk/arch/paging.h>
 #include <x86/apic_defs.h>
 #include <uk/plat/lcpu.h>
@@ -31,7 +31,7 @@ static inline void unmask_8259_pic()
 	outb(PIC2_DATA, 0x8e);
 }
 
-static inline void lapic_sw_disable()
+static inline void lapic_timer_disable()
 {
 	volatile __u32 *volatile lapic_tmict = LAPIC_TMICT;
 	__u32 eax, edx, tmict;
@@ -44,7 +44,7 @@ static inline void lapic_sw_disable()
 	*lapic_tmict = 0x0;
 }
 
-static inline void piix_elcr2_level_irq10_11()
+static inline void pic_8259_elcr2_level_irq10_11()
 {
 	outb(0x4d1, 0xc);
 }
@@ -57,9 +57,9 @@ uk_efi_status_t uk_efi_jmp_to_kern()
 
 	unmask_8259_pic();
 
-	lapic_sw_disable();
+	lapic_timer_disable();
 
-	piix_elcr2_level_irq10_11();
+	pic_8259_elcr2_level_irq10_11();
 
 	lcpu_start64(&uk_efi_boot_startup_args, ukplat_bootinfo_get());
 

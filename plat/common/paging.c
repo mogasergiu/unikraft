@@ -1437,57 +1437,14 @@ static inline unsigned long bootinfo_to_page_attr(__u16 flags)
 	return prot;
 }
 
-static int unmap_static_bpt(struct ukplat_bootinfo *bi)
-{
-	int rc;
-
-	/* TODO: Until we generate the boot page table at compile time, we
-	 * manually add two untyped unmap regions to the boot info to force an
-	 * unmapping of the 1:1 mapping after and before the kernel image
-	 * before mapping only the necessary parts.
-	 */
-#if defined(__X86_64__)
-#define PLATFORM_MAX_MEM_ADDR 0x00100000000 /* 4 GiB */
-#define PLATFORM_MIN_MEM_ADDR 0x00000100000 /* 1 MiB */
-#elif defined(__ARM_64__)
-#define PLATFORM_MAX_MEM_ADDR 0x00080000000 /* 2 GiB */
-#define PLATFORM_MIN_MEM_ADDR 0x00040000000 /* 1 GiB */
-#endif
-	rc = ukplat_memregion_list_insert(&bi->mrds,
-		&(struct ukplat_memregion_desc){
-			.vbase = PAGE_ALIGN_UP(__END),
-			.pbase = 0,
-			.len   = PLATFORM_MAX_MEM_ADDR - PAGE_ALIGN_UP(__END),
-			.type  = 0,
-			.flags = UKPLAT_MEMRF_UNMAP,
-		});
-	if (unlikely(rc < 0))
-		return rc;
-
-	return ukplat_memregion_list_insert(&bi->mrds,
-		&(struct ukplat_memregion_desc){
-			.vbase = PLATFORM_MIN_MEM_ADDR,
-			.pbase = 0,
-			.len   = PAGE_ALIGN_DOWN(__BASE_ADDR) -
-				 PLATFORM_MIN_MEM_ADDR,
-			.type  = 0,
-			.flags = UKPLAT_MEMRF_UNMAP,
-		});
-}
-
 int ukplat_paging_init(void)
 {
-	struct ukplat_bootinfo *bi = ukplat_bootinfo_get();
 	struct ukplat_memregion_desc *mrd;
-	__sz len;
+	unsigned long prot;
 	__vaddr_t vaddr;
 	__paddr_t paddr;
-	unsigned long prot;
+	__sz len;
 	int rc;
-
-	rc = unmap_static_bpt(bi);
-	if (unlikely(rc < 0))
-		return rc;
 
 	/* Initialize the frame allocator with the free physical memory
 	 * regions supplied via the boot info. The new page table uses the
@@ -1525,11 +1482,6 @@ int ukplat_paging_init(void)
 	if (unlikely(!kernel_pt.fa))
 		return rc;
 
-	/* Activate page table */
-	rc = ukplat_pt_set_active(&kernel_pt);
-	if (unlikely(rc))
-		return rc;
-
 	/* Perform unmappings */
 	ukplat_memregion_foreach(&mrd, 0, UKPLAT_MEMRF_UNMAP,
 				 UKPLAT_MEMRF_UNMAP) {
@@ -1561,8 +1513,10 @@ int ukplat_paging_init(void)
 			return rc;
 	}
 
-	ukplat_memregion_list_delete(&bi->mrds, 0);
-	ukplat_memregion_list_delete(&bi->mrds, 0);
+	/* Activate page table */
+	rc = ukplat_pt_set_active(&kernel_pt);
+	if (unlikely(rc))
+		return rc;
 
 	return 0;
 }

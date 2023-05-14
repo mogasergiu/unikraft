@@ -53,47 +53,11 @@
 #include <uk/falloc.h>
 #endif /* CONFIG_PAGING */
 
+extern struct ukplat_memregion_desc bpt_unmap_mrd;
+
 smccc_conduit_fn_t smccc_psci_call;
 
-#define _libkvmplat_newstack(sp) ({				\
-	__asm__ __volatile__("mov sp, %0\n" ::"r" (sp));	\
-})
-
-static void _init_dtb(void *dtb_pointer)
-{
-	int ret;
-
-	if ((ret = fdt_check_header(dtb_pointer)))
-		UK_CRASH("Invalid DTB: %s\n", fdt_strerror(ret));
-
-	/* If the previous boot phase did not update it already, we will do so.
-	 * Note that we are not marking it as UKPLAT_MEMRF_MAP. Since we can
-	 * read it, it means we already have it mapped into our static page
-	 * tables. However, since we only know how to unmap the first DRAM
-	 * bank, we must be cautios and not touch this memory region because
-	 * we do not know where the previous boot phase mapped it for us.
-	 * Otherwise, this could easily make `ukplat_paging_init` generate
-	 * an -EEXIST error code.
-	 */
-	if (!ukplat_bootinfo_get()->dtb) {
-		ret = ukplat_memregion_list_insert(&ukplat_bootinfo_get()->mrds,
-			&(struct ukplat_memregion_desc){
-				.vbase = (__vaddr_t)dtb_pointer,
-				.pbase = (__vaddr_t)dtb_pointer,
-				.len   = fdt_totalsize(dtb_pointer),
-				.type  = UKPLAT_MEMRT_DEVICETREE,
-				.flags = UKPLAT_MEMRF_READ | UKPLAT_MEMRF_MAP,
-			});
-		if (unlikely(ret < 0))
-			UK_CRASH("Could not insert DT memory descriptor");
-
-		ukplat_bootinfo_get()->dtb = (__u64)dtb_pointer;
-	}
-
-	uk_pr_info("Found device tree on: %p\n", dtb_pointer);
-}
-
-static void _dtb_get_psci_method(void *dtb_pointer)
+static void _dtb_get_psci_method(void *fdt)
 {
 	int fdtpsci, len;
 	const char *fdtmethod;
@@ -102,10 +66,10 @@ static void _dtb_get_psci_method(void *dtb_pointer)
 	 * We just support PSCI-0.2 and PSCI-1.0, the PSCI-0.1 would not
 	 * be supported.
 	 */
-	fdtpsci = fdt_node_offset_by_compatible(dtb_pointer, -1,
+	fdtpsci = fdt_node_offset_by_compatible(fdt, -1,
 						"arm,psci-1.0");
 	if (fdtpsci < 0)
-		fdtpsci = fdt_node_offset_by_compatible(dtb_pointer,
+		fdtpsci = fdt_node_offset_by_compatible(fdt,
 							-1, "arm,psci-0.2");
 
 	if (fdtpsci < 0) {
@@ -113,7 +77,7 @@ static void _dtb_get_psci_method(void *dtb_pointer)
 		goto enomethod;
 	}
 
-	fdtmethod = fdt_getprop(dtb_pointer, fdtpsci, "method", &len);
+	fdtmethod = fdt_getprop(fdt, fdtpsci, "method", &len);
 	if (!fdtmethod || (len <= 0)) {
 		uk_pr_info("No PSCI method found\n");
 		goto enomethod;
@@ -136,197 +100,123 @@ enomethod:
 	smccc_psci_call = NULL;
 }
 
-static int _init_dtb_mem(void *dtb_pointer)
+#ifdef CONFIG_HAVE_PAGING
+static int ukplat_memregion_insert_unmaps(struct ukplat_bootinfo *bi)
 {
-	int fdt_mem, prop_len = 0, prop_min_len;
-	int naddr, nsize, rc;
-	const __u64 *regs;
-	__u64 mem_base, mem_size;
-
-	/* search for assigned VM memory in DTB */
-	if (fdt_num_mem_rsv(dtb_pointer) != 0)
-		uk_pr_warn("Reserved memory is not supported\n");
-
-	fdt_mem = fdt_node_offset_by_prop_value(dtb_pointer, -1,
-						"device_type",
-						"memory", sizeof("memory"));
-	if (fdt_mem < 0) {
-		uk_pr_warn("No memory found in DTB\n");
-		return fdt_mem;
-	}
-
-	naddr = fdt_address_cells(dtb_pointer, fdt_mem);
-	if (naddr < 0 || naddr >= FDT_MAX_NCELLS)
-		UK_CRASH("Could not find proper address cells!\n");
-
-	nsize = fdt_size_cells(dtb_pointer, fdt_mem);
-	if (nsize < 0 || nsize >= FDT_MAX_NCELLS)
-		UK_CRASH("Could not find proper size cells!\n");
-
-	/*
-	 * QEMU will always provide us at least one bank of memory.
-	 * unikraft will use the first bank for the time-being.
-	 */
-	regs = fdt_getprop(dtb_pointer, fdt_mem, "reg", &prop_len);
-
-	/*
-	 * The property must contain at least the start address
-	 * and size, each of which is 8-bytes.
-	 */
-	prop_min_len = (int)sizeof(fdt32_t) * (naddr + nsize);
-	if (regs == NULL || prop_len < prop_min_len)
-		UK_CRASH("Bad 'reg' property: %p %d\n", regs, prop_len);
-
-	/* If we have more than one memory bank, give a warning messasge */
-	if (prop_len > prop_min_len)
-		uk_pr_warn("Currently, we support only one memory bank!\n");
-
-	mem_base = fdt64_to_cpu(regs[0]);
-	mem_size = fdt64_to_cpu(regs[1]);
-	if (mem_base > __TEXT)
-		UK_CRASH("Fatal: Image outside of RAM\n");
-
-        rc = ukplat_memregion_list_insert(&ukplat_bootinfo_get()->mrds,
-		&(struct ukplat_memregion_desc){
-			.vbase = (__vaddr_t)mem_base,
-			.pbase = (__paddr_t)mem_base,
-			.len   = mem_size,
-			.type  = UKPLAT_MEMRT_FREE,
-			.flags = UKPLAT_MEMRF_READ |
-				 UKPLAT_MEMRF_WRITE,
-		});
-	if (unlikely(rc < 0))
-		UK_CRASH("Could not add free memory descriptor\n");
-
-	return ukplat_memregion_list_coalesce(&ukplat_bootinfo_get()->mrds);
-}
-
-#ifdef CONFIG_PAGING
-#define DRAM_START					0x40000000UL
-#define DRAM_LEN					0x40000000UL
-static int mem_init(void)
-{
-	struct ukplat_memregion_desc *mrd;
-	struct uk_pagetable *pt;
+	__vaddr_t unmap_start, unmap_end;
 	int rc;
 
-	ukplat_memregion_foreach(&mrd, 0, 0, 0)
-		if (!IN_RANGE(mrd->pbase, DRAM_START, DRAM_LEN))
-			mrd->flags &= ~UKPLAT_MEMRF_MAP;
+	unmap_start = PAGE_ALIGN_DOWN(bpt_unmap_mrd.vbase);
+	unmap_end = unmap_start + PAGE_ALIGN_DOWN(bpt_unmap_mrd.len);
+
+	rc = ukplat_memregion_list_insert(&bi->mrds,
+			&(struct ukplat_memregion_desc){
+				.vbase = PAGE_ALIGN_UP(__END),
+				.pbase = 0,
+				.len   = unmap_end - PAGE_ALIGN_UP(__END),
+				.type  = 0,
+				.flags = UKPLAT_MEMRF_UNMAP,
+			});
+	if (unlikely(rc < 0))
+		return rc;
+
+	return ukplat_memregion_list_insert(&bi->mrds,
+			&(struct ukplat_memregion_desc){
+				.vbase = unmap_start,
+				.pbase = 0,
+				.len   = PAGE_ALIGN_DOWN(__BASE_ADDR) -
+					 unmap_start,
+				.type  = 0,
+				.flags = UKPLAT_MEMRF_UNMAP,
+			});
+}
+
+static int mem_init(struct ukplat_bootinfo *bi)
+{
+	int rc;
+
+	rc = ukplat_memregion_insert_unmaps(bi);
+	if (unlikely(rc < 0))
+		return rc;
 
 	rc = ukplat_paging_init();
 	if (unlikely(rc < 0))
 		return rc;
 
-#ifdef CONFIG_LIBUKBOOT_HEAP_BASE
-	pt = ukplat_pt_get_active();
-	rc = ukplat_page_unmap(pt, CONFIG_LIBUKBOOT_HEAP_BASE,
-			       pt->fa->free_memory >> PAGE_SHIFT,
-			       PAGE_FLAG_KEEP_PTES);
-	if (unlikely(rc))
-		return rc;
-#endif
+	ukplat_memregion_list_delete(&bi->mrds, 0);
+	ukplat_memregion_list_delete(&bi->mrds, 0);
 
 	return 0;
 }
-#else
-#define L0_PT0_START_PAGE				0x40000000UL
-#define L0_PT0_LEN					0x00200000UL
-extern __pte_t arm64_bpt_l0_pt0[];
-
-static int mem_init(void)
+#else /* CONFIG_HAVE_PAGING */
+static int mem_init(struct ukplat_bootinfo *bi)
 {
-	struct ukplat_memregion_desc *mrd;
-	__paddr_t paddr, pstart, pend;
-	__pte_t pte_attr;
-	__sz len, idx;
+	struct ukplat_memregion_desc *mrdp;
+	__vaddr_t unmap_end;
+	int i;
 
-	ukplat_memregion_foreach(&mrd, 0, UKPLAT_MEMRF_MAP, UKPLAT_MEMRF_MAP) {
-		pstart = PAGE_ALIGN_UP(mrd->pbase);
-		len = PAGE_ALIGN_DOWN(mrd->len - (pstart - mrd->pbase));
+	/* The static boot page table maps only the first 4 GiB. Remove all
+	 * free memory regions above this limit so we won't use them for the
+	 * heap. Start from the tail as the memory list is ordered by address.
+	 * We can stop at the first area that is completely in the mapped area.
+	 */
+	unmap_end = PAGE_ALIGN_DOWN(bpt_unmap_mrd.vbase + bpt_unmap_mrd.len);
+	for (i = (int)bi->mrds.count - 1; i >= 0; i--) {
+		ukplat_memregion_get(i, &mrdp);
+		if (mrdp->vbase >= unmap_end) {
+			/* Region is outside the mapped area */
+			uk_pr_info("Memory %012lx-%012lx outside mapped area\n",
+				   mrdp->vbase, mrdp->vbase + mrdp->len);
 
-		if (unlikely(len == 0))
-			continue;
+			if (mrdp->type == UKPLAT_MEMRT_FREE)
+				ukplat_memregion_list_delete(&bi->mrds, i);
+		} else if (mrdp->vbase + mrdp->len > unmap_end) {
+			/* Region overlaps with unmapped area */
+			uk_pr_info("Memory %012lx-%012lx outside mapped area\n",
+				   unmap_end,
+				   mrdp->vbase + mrdp->len);
 
-		if (!RANGE_CONTAIN(L0_PT0_START_PAGE, L0_PT0_LEN, pstart, len))
-			continue;
+			if (mrdp->type == UKPLAT_MEMRT_FREE)
+				mrdp->len -= (mrdp->vbase + mrdp->len) -
+					     unmap_end;
 
-		if (mrd->flags & UKPLAT_MEMRF_WRITE)
-			pte_attr = PTE_ATTR_NORMAL_RW | PTE_TYPE_PAGE;
-		else if (mrd->flags & UKPLAT_MEMRF_EXECUTE)
-			pte_attr = PTE_ATTR_NORMAL_RX | PTE_TYPE_PAGE;
-		else
-			pte_attr = PTE_ATTR_NORMAL_RO | PTE_TYPE_PAGE;
-
-		pend = pstart + len;
-		for (paddr = pstart; paddr < pend; paddr += PAGE_SIZE) {
-			idx = (paddr - L0_PT0_START_PAGE) >> PAGE_SHIFT;
-			arm64_bpt_l0_pt0[idx] = paddr + pte_attr;
+			/* Since regions are non-overlapping and ordered, we
+			 * can stop here, as the next region would be fully
+			 * mapped anyways
+			 */
+			break;
+		} else {
+			/* Region is fully mapped */
+			break;
 		}
 	}
 
 	return 0;
 }
-#endif
+#endif /* !CONFIG_HAVE_PAGING */
 
 static char *cmdline;
 static __sz cmdline_len;
 
-static void _dtb_get_cmdline(void *dtb_pointer)
+static inline int cmdline_init(struct ukplat_bootinfo *bi)
 {
-	char *cmdl;
-	int fdtchosen, len;
-	const char *fdtcmdline;
+	char *cmdl = (bi->cmdline) ? (char *)bi->cmdline : CONFIG_UK_NAME;
 
-	if (ukplat_bootinfo_get()->cmdline) {
-		len = strlen((const char *)ukplat_bootinfo_get()->cmdline);
-		cmdl = (char *)ukplat_bootinfo_get()->cmdline;
-	} else {
-		/* TODO: Proper error handling */
-		fdtchosen = fdt_path_offset(dtb_pointer, "/chosen");
-		if (!fdtchosen)
-			goto enocmdl;
-		fdtcmdline = fdt_getprop(dtb_pointer, fdtchosen, "bootargs",
-					 &len);
-		if (!fdtcmdline || len <= 0)
-			goto enocmdl;
+	cmdline_len = strlen(cmdl) + 1;
 
-		cmdl = ukplat_memregion_alloc(len + sizeof(CONFIG_UK_NAME),
-					      UKPLAT_MEMRT_CMDLINE,
-					      UKPLAT_MEMRF_READ |
-					      UKPLAT_MEMRF_MAP);
-		if (unlikely(!cmdl))
-			UK_CRASH("Command-line alloc failed\n");
-
-		/* Ensure it has been added properly and cache it */
-		ukplat_bootinfo_get()->cmdline = (__u64)cmdl;
-		strncpy(cmdl, CONFIG_UK_NAME, sizeof(CONFIG_UK_NAME));
-		strncat(cmdl, " ", 1);
-		strncat(cmdl, fdtcmdline, len);
-		/* ensure null termination */
-		len += sizeof(CONFIG_UK_NAME);
-		cmdl[len - 1] = '\0';
-	}
-
-	/* Tag this scratch cmdline as a kernel resource, to distinguish it
-	 * from the original cmdline obtained above
+	/* This is not the original command-line, but one that will be thrashed
+	 * by `ukplat_entry_argp` to obtain argc/argv. So mark it as a kernel
+	 * resource instead.
 	 */
-	cmdline = ukplat_memregion_alloc(len + 1, UKPLAT_MEMRT_KERNEL,
+	cmdline = ukplat_memregion_alloc(cmdline_len, UKPLAT_MEMRT_KERNEL,
 					 UKPLAT_MEMRF_READ |
 					 UKPLAT_MEMRF_WRITE |
 					 UKPLAT_MEMRF_MAP);
 	if (unlikely(!cmdline))
-		UK_CRASH("Could not allocate scratch command-line memory");
+		return -ENOMEM;
 
-	strncpy(cmdline, cmdl, len);
-	cmdline_len = len;
-
-	uk_pr_info("Command line: %s\n", cmdline);
-
-	return;
-
-enocmdl:
-	uk_pr_info("No command line found\n");
+	strncpy(cmdline, cmdl, cmdline_len);
+	return 0;
 }
 
 static void __noreturn _ukplat_entry2(void)
@@ -336,21 +226,19 @@ static void __noreturn _ukplat_entry2(void)
 	ukplat_lcpu_halt();
 }
 
-void __no_pauth _libkvmplat_start(void *dtb_pointer)
+void __no_pauth _ukplat_entry(struct ukplat_bootinfo *bi)
 {
 	void *bstack;
-	int ret;
+	void *fdt;
+	int rc;
 
-	_init_dtb(dtb_pointer);
+	fdt = (void *)bi->dtb;
 
-	pl011_console_init(dtb_pointer);
+	pl011_console_init(fdt);
 
-	uk_pr_info("Entering from KVM (arm64)...\n");
-
-	/* Initialize memory from DTB */
-	ret = _init_dtb_mem(dtb_pointer);
-	if (unlikely(ret))
-		UK_CRASH("Could not initialize memory regions (%d)\n", ret);
+	rc = cmdline_init(bi);
+	if (unlikely(rc < 0))
+		UK_CRASH("Failed to initialize command-line\n");
 
 	/* Allocate boot stack */
 	bstack = ukplat_memregion_alloc(__STACK_SIZE, UKPLAT_MEMRT_STACK,
@@ -361,51 +249,49 @@ void __no_pauth _libkvmplat_start(void *dtb_pointer)
 		UK_CRASH("Boot stack alloc failed\n");
 	bstack = (void *)((__uptr)bstack + __STACK_SIZE);
 
-	/* Get command line from DTB */
-	_dtb_get_cmdline(dtb_pointer);
-
 	/* Get PSCI method from DTB */
-	_dtb_get_psci_method(dtb_pointer);
+	_dtb_get_psci_method(fdt);
 
 	/* Initialize paging */
-	ret = mem_init();
-	if (unlikely(ret))
-		UK_CRASH("Could not initialize paging (%d)\n", ret);
+	rc = mem_init(bi);
+	if (unlikely(rc))
+		UK_CRASH("Could not initialize paging (%d)\n", rc);
+
 #if defined(ENFORCE_W_XOR_X) && defined(PAGING)
 	enforce_w_xor_x();
 #endif /* CONFIG_ENFORCE_W_XOR_X && CONFIG_PAGING */
 
 #ifdef CONFIG_ARM64_FEAT_PAUTH
-	ret = ukplat_pauth_init();
-	if (unlikely(ret))
-		UK_CRASH("Could not initialize PAuth (%d)\n", ret);
+	rc = ukplat_pauth_init();
+	if (unlikely(rc))
+		UK_CRASH("Could not initialize PAuth (%d)\n", rc);
 #endif /* CONFIG_ARM64_FEAT_PAUTH */
 
 #ifdef CONFIG_HAVE_MEMTAG
-	ret = ukarch_memtag_init();
-	if (unlikely(ret))
-		UK_CRASH("Could not initialize MTE (%d)\n", ret);
+	rc = ukarch_memtag_init();
+	if (unlikely(rc))
+		UK_CRASH("Could not initialize MTE (%d)\n", rc);
 #endif /* CONFIG_HAVE_MEMTAG */
 
 #ifdef CONFIG_RTC_PL031
 	/* Initialize RTC */
-	pl031_init_rtc(dtb_pointer);
+	pl031_init_rtc(fdt);
 #endif /* CONFIG_RTC_PL031 */
 
 	/* Initialize interrupt controller */
 	intctrl_init();
 
 	/* Initialize logical boot CPU */
-	ret = lcpu_init(lcpu_get_bsp());
-	if (unlikely(ret))
-		UK_CRASH("Failed to initialize bootstrapping CPU: %d\n", ret);
+	rc = lcpu_init(lcpu_get_bsp());
+	if (unlikely(rc))
+		UK_CRASH("Failed to initialize bootstrapping CPU: %d\n", rc);
 
 #ifdef CONFIG_HAVE_SMP
-	ret = lcpu_mp_init(CONFIG_UKPLAT_LCPU_RUN_IRQ,
+	rc = lcpu_mp_init(CONFIG_UKPLAT_LCPU_RUN_IRQ,
 			   CONFIG_UKPLAT_LCPU_WAKEUP_IRQ,
-			   dtb_pointer);
-	if (unlikely(ret))
-		UK_CRASH("SMP initialization failed: %d.\n", ret);
+			   fdt);
+	if (unlikely(rc))
+		UK_CRASH("SMP initialization failed: %d.\n", rc);
 #endif /* CONFIG_HAVE_SMP */
 
 	/*
