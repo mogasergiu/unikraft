@@ -380,3 +380,103 @@ int ukplat_memregion_get(int i, struct ukplat_memregion_desc **mrd)
 	*mrd = &bi->mrds.mrds[i];
 	return 0;
 }
+
+extern struct ukplat_memregion_desc bpt_unmap_mrd;
+
+#ifdef CONFIG_HAVE_PAGING
+static int ukplat_memregion_insert_unmaps(struct ukplat_bootinfo *bi)
+{
+	__vaddr_t unmap_start, unmap_end;
+	int rc;
+
+	unmap_start = ALIGN_DOWN(bpt_unmap_mrd.vbase, __PAGE_SIZE);
+	unmap_end = unmap_start + ALIGN_DOWN(bpt_unmap_mrd.len, __PAGE_SIZE);
+
+	rc = ukplat_memregion_list_insert(&bi->mrds,
+			&(struct ukplat_memregion_desc){
+				.vbase = ALIGN_UP(__END, __PAGE_SIZE),
+				.pbase = 0,
+				.len   = unmap_end -
+					 ALIGN_UP(__END, __PAGE_SIZE),
+				.type  = 0,
+				.flags = UKPLAT_MEMRF_UNMAP,
+			});
+	if (unlikely(rc < 0))
+		return rc;
+
+	return ukplat_memregion_list_insert(&bi->mrds,
+			&(struct ukplat_memregion_desc){
+				.vbase = unmap_start,
+				.pbase = 0,
+				.len   = ALIGN_DOWN(__BASE_ADDR, __PAGE_SIZE) -
+					 unmap_start,
+				.type  = 0,
+				.flags = UKPLAT_MEMRF_UNMAP,
+			});
+}
+
+int ukplat_mem_init()
+{
+	struct ukplat_bootinfo *bi = ukplat_bootinfo_get();
+	int rc;
+
+	UK_ASSERT(bi);
+
+	rc = ukplat_memregion_insert_unmaps(bi);
+	if (unlikely(rc < 0))
+		return rc;
+
+	rc = ukplat_paging_init();
+	if (unlikely(rc < 0))
+		return rc;
+
+	ukplat_memregion_list_delete(&bi->mrds, 0);
+	ukplat_memregion_list_delete(&bi->mrds, 0);
+
+	return 0;
+}
+#else /* CONFIG_HAVE_PAGING */
+int ukplat_mem_init()
+{
+	struct ukplat_bootinfo *bi = ukplat_bootinfo_get();
+	struct ukplat_memregion_desc *mrdp;
+	__vaddr_t unmap_end;
+	int i;
+
+	UK_ASSERT(bi);
+
+	unmap_end = ALIGN_DOWN(bpt_unmap_mrd.vbase + bpt_unmap_mrd.len,
+			       __PAGE_SIZE);
+	for (i = (int)bi->mrds.count - 1; i >= 0; i--) {
+		ukplat_memregion_get(i, &mrdp);
+		if (mrdp->vbase >= unmap_end) {
+			/* Region is outside the mapped area */
+			uk_pr_info("Memory %012lx-%012lx outside mapped area\n",
+				   mrdp->vbase, mrdp->vbase + mrdp->len);
+
+			if (mrdp->type == UKPLAT_MEMRT_FREE)
+				ukplat_memregion_list_delete(&bi->mrds, i);
+		} else if (mrdp->vbase + mrdp->len > unmap_end) {
+			/* Region overlaps with unmapped area */
+			uk_pr_info("Memory %012lx-%012lx outside mapped area\n",
+				   unmap_end,
+				   mrdp->vbase + mrdp->len);
+
+			if (mrdp->type == UKPLAT_MEMRT_FREE)
+				mrdp->len -= (mrdp->vbase + mrdp->len) -
+					     unmap_end;
+
+			/* Since regions are non-overlapping and ordered, we
+			 * can stop here, as the next region would be fully
+			 * mapped anyways
+			 */
+			break;
+		} else {
+			/* Region is fully mapped */
+			break;
+		}
+	}
+
+	return 0;
+}
+#endif /* !CONFIG_HAVE_PAGING */
