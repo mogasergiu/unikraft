@@ -29,59 +29,6 @@
 #include <uk/falloc.h>
 #endif /* CONFIG_HAVE_PAGING */
 
-#define PLATFORM_MAX_MEM_ADDR 0x100000000 /* 4 GiB */
-
-#ifdef CONFIG_HAVE_PAGING
-static int mem_init(void)
-{
-	return ukplat_paging_init();
-}
-#else /* CONFIG_HAVE_PAGING */
-static int mem_init(void)
-{
-	struct ukplat_bootinfo *bi = ukplat_bootinfo_get();
-	struct ukplat_memregion_desc *mrdp;
-	int i;
-
-	/* The static boot page table maps only the first 4 GiB. Remove all
-	 * free memory regions above this limit so we won't use them for the
-	 * heap. Start from the tail as the memory list is ordered by address.
-	 * We can stop at the first area that is completely in the mapped area.
-	 */
-	for (i = (int)bi->mrds.count - 1; i >= 0; i--) {
-		ukplat_memregion_get(i, &mrdp);
-		if (mrdp->vbase >= PLATFORM_MAX_MEM_ADDR) {
-			/* Region is outside the mapped area */
-			uk_pr_info("Memory %012lx-%012lx outside mapped area\n",
-				   mrdp->vbase, mrdp->vbase + mrdp->len);
-
-			if (mrdp->type == UKPLAT_MEMRT_FREE)
-				ukplat_memregion_list_delete(&bi->mrds, i);
-		} else if (mrdp->vbase + mrdp->len > PLATFORM_MAX_MEM_ADDR) {
-			/* Region overlaps with unmapped area */
-			uk_pr_info("Memory %012lx-%012lx outside mapped area\n",
-				   PLATFORM_MAX_MEM_ADDR,
-				   mrdp->vbase + mrdp->len);
-
-			if (mrdp->type == UKPLAT_MEMRT_FREE)
-				mrdp->len -= (mrdp->vbase + mrdp->len) -
-						PLATFORM_MAX_MEM_ADDR;
-
-			/* Since regions are non-overlapping and ordered, we
-			 * can stop here, as the next region would be fully
-			 * mapped anyways
-			 */
-			break;
-		} else {
-			/* Region is fully mapped */
-			break;
-		}
-	}
-
-	return 0;
-}
-#endif /* !CONFIG_HAVE_PAGING */
-
 static char *cmdline;
 static __sz cmdline_len;
 
@@ -162,7 +109,7 @@ void _ukplat_entry(struct lcpu *lcpu, struct ukplat_bootinfo *bi)
 	bstack = (void *)((__uptr)bstack + __STACK_SIZE);
 
 	/* Initialize memory */
-	rc = mem_init();
+	rc = ukplat_mem_init();
 	if (unlikely(rc))
 		UK_CRASH("Mem init failed: %d\n", rc);
 
