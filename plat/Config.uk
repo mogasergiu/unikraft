@@ -15,9 +15,17 @@ config UKPLAT_MEMREGION_MAX_COUNT
 		the amount of statically allocated space in the image made available
 		for storing memory region descriptors' metadata.
 
+menuconfig UKPLAT_ACPI_SMP
+	bool "Enable SMP initialization through ACPI"
+	default n
+
+if UKPLAT_ACPI_SMP
+
 config UKPLAT_ACPI_CHECKSUM
 	bool "Verify ACPI structures' checksum"
 	default n
+
+endif
 
 config UKPLAT_LCPU_MAXCOUNT
 	int "Maximum number of supported logical CPUs"
@@ -28,6 +36,7 @@ config HAVE_SMP
 	bool
 	default y if UKPLAT_LCPU_MAXCOUNT > 1
 	default n
+	select UKPLAT_ACPI_SMP if ARCH_X86_64
 
 menu "Multiprocessor Configuration"
 	depends on HAVE_SMP
