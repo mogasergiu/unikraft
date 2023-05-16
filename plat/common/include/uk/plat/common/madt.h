@@ -35,7 +35,7 @@
 #ifndef __PLAT_CMN_X86_MADT_H__
 #define __PLAT_CMN_X86_MADT_H__
 
-#include <x86/acpi/sdt.h>
+#include "sdt.h"
 
 #define MADT_LAPIC				0x00
 #define MADT_IO_APIC				0x01

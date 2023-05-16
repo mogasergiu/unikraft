@@ -7,7 +7,7 @@
 #include <string.h>
 #include <x86/cpu.h>
 #include <x86/traps.h>
-#include <x86/acpi/acpi.h>
+#include <uk/plat/common/acpi.h>
 #include <uk/arch/limits.h>
 #include <uk/arch/types.h>
 #include <uk/arch/paging.h>

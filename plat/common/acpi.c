@@ -34,7 +34,7 @@
 
 #include <uk/print.h>
 #include <uk/assert.h>
-#include <x86/acpi/acpi.h>
+#include <uk/plat/common/acpi.h>
 #include <string.h>
 #include <errno.h>
 #include <kvm/efi.h>

@@ -35,8 +35,8 @@
 #ifndef __PLAT_CMN_X86_ACPI_H__
 #define __PLAT_CMN_X86_ACPI_H__
 
-#include <x86/acpi/sdt.h>
-#include <x86/acpi/madt.h>
+#include "sdt.h"
+#include "madt.h"
 
 #define RSDP_SIG		"RSD PTR "
 #define RSDP_SIG_LEN		8
