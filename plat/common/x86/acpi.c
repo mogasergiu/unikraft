@@ -1,8 +1,9 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 /*
  * Authors: Cristian Vijelie <cristianvijelie@gmail.com>
+ *          Sergiu Moga <sergiu.moga@protonmail.com>
  *
- * Copyright (c) 2021, University POLITEHNICA of Bucharest. All rights reserved.
+ * Copyright (c) 2023, University POLITEHNICA of Bucharest. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -44,45 +45,75 @@
 #define BIOS_ROM_END		0xFFFFFUL
 #define BIOS_ROM_STEP		16
 
-static struct acpi_madt *acpi_madt;
+static acpi_madt_t *acpi_madt;
+static acpi_fadt_t *acpi_fadt;
 static __u8 acpi_rsdt_entries;
 static void *acpi_rsdt;
 static __u8 acpi10;
 
+static struct {
+	acpi_sdt_hdr_t **sdt;
+	const char *sig;
+} acpi_sdts[] = {
+	{
+		.sdt = (acpi_sdt_hdr_t **)&acpi_fadt,
+		.sig = ACPI_FADT_SIG,
+	},
+	{
+		.sdt = (acpi_sdt_hdr_t **)&acpi_madt,
+		.sig = ACPI_MADT_SIG,
+	},
+};
+
 static inline __paddr_t get_rsdt_entry(int idx)
 {
-	__u8 *entryp = (__u8 *)acpi_rsdt + sizeof(struct acpi_sdt_hdr);
+	__u8 *entryp = (__u8 *)acpi_rsdt + sizeof(acpi_sdt_hdr_t);
 	if (acpi10)
 		return ((__u32 *)entryp)[idx];
 
 	return ((__u64 *)entryp)[idx];
 }
 
-int acpi_get_table(const char *const signature, void * *const tbl)
+static __u8 get_acpi_checksum(void *const buf, const __sz len)
 {
-	int i;
-	struct acpi_sdt_hdr *h;
+	const __u8 *const ptr_end = (__u8 *)buf + len;
+	const __u8 *ptr = (__u8 *)buf;
+	__u8 checksum = 0;
+
+	while (ptr < ptr_end)
+		checksum += *ptr++;
+
+	return checksum;
+}
+
+static void acpi_init_tables(void)
+{
+	acpi_sdt_hdr_t *h;
+	const char *sig;
+	__sz i, j;
 
 	UK_ASSERT(acpi_rsdt);
 
-	for (i = 0; i < acpi_rsdt_entries; i++) {
-		h = (struct acpi_sdt_hdr *)get_rsdt_entry(i);
+	for (i = 0; i < acpi_rsdt_entries; i++)
+		for (j = 0; j < ARRAY_SIZE(acpi_sdts); j++) {
+			if (*acpi_sdts[j].sdt)
+				continue;
 
-		if (!memcmp(h->signature, signature, ACPI_SDT_SIGNATURE_LEN)) {
-			if (get_acpi_checksum(h, h->tab_len) != 0) {
+			h = (acpi_sdt_hdr_t *)get_rsdt_entry(i);
+			sig = acpi_sdts[j].sig;
 
-				uk_pr_err("ACPI %s corrupted\n", signature);
+			if (!memcmp(h->sig, sig, ACPI_SDT_SIG_LEN)) {
+				if (unlikely(get_acpi_checksum(h, h->tab_len))) {
+					uk_pr_warn("ACPI %s corrupted\n", sig);
 
-				return -ENOENT;
+					continue;
+				}
+
+				*acpi_sdts[j].sdt = h;
+
+				continue;
 			}
-
-			*tbl = h;
-
-			return 0;
 		}
-	}
-
-	return -ENOENT;
 }
 
 /*
@@ -92,24 +123,26 @@ int acpi_get_table(const char *const signature, void * *const tbl)
 static void acpi_list_tables(void)
 {
 	int i;
-	struct acpi_sdt_hdr *h;
 
 	UK_ASSERT(acpi_rsdt);
 
-	uk_pr_debug("%d ACPI tables found\n", acpi_rsdt_entries);
-	for (i = 0; i < acpi_rsdt_entries; i++) {
-		h = (struct acpi_sdt_hdr *)get_rsdt_entry(i);
-		uk_pr_debug("%p: %.4s\n", h, h->signature);
+	uk_pr_debug("%d ACPI tables found from %.4s\n", acpi_rsdt_entries,
+		    acpi10 ? ACPI_RSDT_SIG : ACPI_XSDT_SIG);
+	for (i = 0; i < ARRAY_SIZE(acpi_sdts); i++) {
+		if (!acpi_sdts[i].sdt)
+			continue;
+
+		uk_pr_debug("%p: %.4s\n", acpi_sdts[i].sdt, acp_sdts[i].sig);
 	}
 }
 #endif /* UK_DEBUG */
 
-static struct acpi_rsdp *get_efi_st_rsdp()
+static acpi_rsdp_t *acpi_get_efi_st_rsdp()
 {
 	struct ukplat_bootinfo *bi = ukplat_bootinfo_get();
 	uk_efi_uintn_t ct_count, i;
-	struct acpi_rsdp *rsdp;
 	uk_efi_cfg_tab_t *ct;
+	acpi_rsdp_t *rsdp;
 
 	UK_ASSERT(bi);
 
@@ -131,33 +164,34 @@ static struct acpi_rsdp *get_efi_st_rsdp()
 				 sizeof(ct[i].vendor_guid)))
 			rsdp = ct[i].vendor_table;
 
+	uk_pr_debug("ACPI RSDP present at %p\n", rsdp);
+
 	return rsdp;
 }
 
-static struct acpi_rsdp *get_bios_rom_rsdp()
+static acpi_rsdp_t *acpi_get_bios_rom_rsdp()
 {
 	__paddr_t ptr;
 
 	for (ptr = BIOS_ROM_START; ptr < BIOS_ROM_END; ptr += BIOS_ROM_STEP)
-		if (!memcmp((void *)ptr, RSDP_SIGNATURE,
-			     sizeof(RSDP_SIGNATURE) - 1)) {
+		if (!memcmp((void *)ptr, RSDP_SIG, sizeof(RSDP_SIG) - 1)) {
 			uk_pr_debug("ACPI RSDP present at %lx\n", ptr);
 
-			return (struct acpi_rsdp *)ptr;
+			return (acpi_rsdp_t *)ptr;
 		}
 
 	return NULL;
 }
 
-static struct acpi_rsdp *get_rsdp()
+static acpi_rsdp_t *acpi_get_rsdp()
 {
-	struct acpi_rsdp *rsdp;
+	acpi_rsdp_t *rsdp;
 
-	rsdp = get_efi_st_rsdp();
+	rsdp = acpi_get_efi_st_rsdp();
 	if (rsdp)
 		return rsdp;
 
-	return get_bios_rom_rsdp();
+	return acpi_get_bios_rom_rsdp();
 }
 
 /*
@@ -165,38 +199,37 @@ static struct acpi_rsdp *get_rsdp()
  */
 int acpi_init(void)
 {
-	struct acpi_rsdp *rsdp;
-	struct acpi_sdt_hdr *h;
-	int ret;
+	acpi_rsdp_t *rsdp;
+	acpi_sdt_hdr_t *h;
 
-	rsdp = get_rsdp();
+	rsdp = acpi_get_rsdp();
 	if (unlikely(!rsdp))
 		return -ENOENT;
 
-	if (get_acpi_checksum(rsdp, RSDP10_LEN) != 0) {
-		uk_pr_err("ACPI1.0 RSDP corrupted\n");
+	if (unlikely(get_acpi_checksum(rsdp, RSDP10_LEN))) {
+		uk_pr_err("ACPI 1.0 RSDP corrupted\n");
 
 		return -ENOENT;
 	}
 
 	if (rsdp->revision == 0) {
-		h = (struct acpi_sdt_hdr *)((__uptr)rsdp->rsdt_paddr);
+		h = (acpi_sdt_hdr_t *)((__uptr)rsdp->rsdt_paddr);
 		acpi_rsdt_entries = (h->tab_len - sizeof(*h)) / 4;
 		acpi10 = 1;
 	} else {
-		if (get_acpi_checksum(rsdp, sizeof(*rsdp)) != 0) {
-			uk_pr_err("ACPI1.0 RSDP corrupted\n");
+		if (unlikely(get_acpi_checksum(rsdp, sizeof(*rsdp)))) {
+			uk_pr_err("ACPI 1.0 RSDP corrupted\n");
 
 			return -ENOENT;
 		}
 
-		h = (struct acpi_sdt_hdr *)rsdp->xsdt_paddr;
+		h = (acpi_sdt_hdr_t *)rsdp->xsdt_paddr;
 		acpi_rsdt_entries = (h->tab_len - sizeof(*h)) / 8;
 	}
 
 	UK_ASSERT(h);
 
-	if (unlikely(get_acpi_checksum(h, h->tab_len) != 0)) {
+	if (unlikely(get_acpi_checksum(h, h->tab_len))) {
 		uk_pr_err("ACPI RSDT corrupted\n");
 
 		return -ENOENT;
@@ -204,9 +237,7 @@ int acpi_init(void)
 
 	acpi_rsdt = h;
 
-	ret = acpi_get_table(ACPI_MADT_SIGNATURE, (void **const)&acpi_madt);
-	if (unlikely(ret < 0) || unlikely(!acpi_madt))
-		return ret;
+	acpi_init_tables();
 
 #ifdef UK_DEBUG
 	acpi_list_tables();
@@ -219,9 +250,19 @@ int acpi_init(void)
 /*
  * Return the Multiple APIC Descriptor Table (MADT).
  */
-struct acpi_madt *acpi_get_madt(void)
+acpi_madt_t *acpi_get_madt(void)
 {
 	UK_ASSERT(acpi_madt);
 
 	return acpi_madt;
+}
+
+/*
+ * Return the Fixed ACPI Description Table (FADT).
+ */
+acpi_fadt_t *acpi_get_fadt(void)
+{
+	UK_ASSERT(acpi_fadt);
+
+	return acpi_fadt;
 }

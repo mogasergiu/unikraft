@@ -1,8 +1,9 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 /*
  * Authors: Cristian Vijelie <cristianvijelie@gmail.com>
+ *          Sergiu Moga <sergiu.moga@protonmail.com>
  *
- * Copyright (c) 2021, University POLITEHNICA of Bucharest. All rights reserved.
+ * Copyright (c) 2023, University POLITEHNICA of Bucharest. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -37,10 +38,11 @@
 #include <x86/acpi/sdt.h>
 #include <x86/acpi/madt.h>
 
-#define RSDP_SIGNATURE		"RSD PTR "
+#define RSDP_SIG		"RSD PTR "
+#define RSDP_SIG_LEN		8
 
-struct acpi_rsdp {
-	char signature[8];
+typedef struct acpi_rsdp {
+	char sig[RSDP_SIG_LEN];
 	__u8 checksum;
 	char oem_id[ACPI_OEM_ID_LEN];
 	__u8 revision;
@@ -49,43 +51,21 @@ struct acpi_rsdp {
 	__u64 xsdt_paddr;
 	__u8 xchecksum;
 	__u8 reserved[3];
-} __packed;
+} __packed acpi_rsdp_t;
 
 /**
- * Check an ACPI structure against its checksum
- *
- * @param buf
- *   The pointer to the ACPI structure
- * @param len
- *   The size of the ACPI structure
- *
- * @return
- *   0 on correct checksum, != 0 otherwise
- */
-static inline __u8 get_acpi_checksum(void *const buf, const __sz len)
-{
-	const __u8 *const ptr_end = (__u8 *)buf + len;
-	const __u8 *ptr = (__u8 *)buf;
-	__u8 checksum = 0;
-
-	while (ptr < ptr_end)
-		checksum += *ptr++;
-
-	return checksum;
-}
-
-/**
- * Get an ACPI table by its signature.
- *
- * @param signature
- *   The signature of the desired ACPI table.
- *
- * @param tbl
- *   The pointer where the found ACPI table will be stored.
+ * Get the Multiple APIC Descriptor Table (MADT).
  *
  * @return ACPI table pointer on success, NULL otherwise.
  */
-int acpi_get_table(const char *const signature, void **const tbl);
+acpi_madt_t *acpi_get_madt(void);
+
+/**
+ * Get the Fixed ACPI Description Table (FADT).
+ *
+ * @return ACPI table pointer on success, NULL otherwise.
+ */
+acpi_fadt_t *acpi_get_fadt(void);
 
 /**
  * Detect ACPI version and fetch ACPI tables.
