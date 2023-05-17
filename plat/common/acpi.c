@@ -74,7 +74,7 @@ static inline __paddr_t get_rsdt_entry(int idx)
 	return ((__u64 *)entryp)[idx];
 }
 
-static __u8 get_acpi_checksum(void *const buf, const __sz len)
+static __u8 get_acpi_checksum(void __maybe_unused *buf, __sz __maybe_unused len)
 {
 #ifdef CONFIG_UKPLAT_ACPI_CHECKSUM
 	const __u8 *const ptr_end = (__u8 *)buf + len;
@@ -195,7 +195,11 @@ static acpi_rsdp_t *acpi_get_rsdp()
 	if (rsdp)
 		return rsdp;
 
+#if defined(__X86_64__)
 	return acpi_get_bios_rom_rsdp();
+#else
+	return NULL;
+#endif
 }
 
 /*

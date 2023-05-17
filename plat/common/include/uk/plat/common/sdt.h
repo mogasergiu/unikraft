@@ -124,14 +124,14 @@ typedef struct acpi_gas {
 #define ACPI_FADT_FLAGS_FORCE_APIC_PHYS_DEST_MODE	(1 << 19)
 #define ACPI_FADT_FLAGS_HW_REDUCED			(1 << 20)
 #define ACPI_FADT_FLAGS_LOW_PWR_S0_IDLE_CAP		(1 << 21)
-#define ACPI_FADT_X86_BOOT_FLAGS_LEGACY_DEVS		(1 <<  1)
-#define ACPI_FADT_X86_BOOT_FLAGS_8042			(1 <<  2)
-#define ACPI_FADT_X86_BOOT_FLAGS_NO_VGA			(1 <<  3)
-#define ACPI_FADT_X86_BOOT_FLAGS_NO_MSI			(1 <<  4)
-#define ACPI_FADT_X86_BOOT_FLAGS_NO_PCIE_ASPM		(1 <<  5)
-#define ACPI_FADT_X86_BOOT_FLAGS_NO_CMOS_RTC		(1 <<  6)
-#define ACPI_FADT_ARM_BOOT_FLAGS_PSCI			(1 <<  0)
-#define ACPI_FADT_ARM_BOOT_FLAGS_PSCI_HVC		(1 <<  1)
+#define ACPI_FADT_X86_BFLAGS_LEGACY_DEVS		(1 <<  1)
+#define ACPI_FADT_X86_BFLAGS_8042			(1 <<  2)
+#define ACPI_FADT_X86_BFLAGS_NO_VGA			(1 <<  3)
+#define ACPI_FADT_X86_BFLAGS_NO_MSI			(1 <<  4)
+#define ACPI_FADT_X86_BFLAGS_NO_PCIE_ASPM		(1 <<  5)
+#define ACPI_FADT_X86_BFLAGS_NO_CMOS_RTC		(1 <<  6)
+#define ACPI_FADT_ARM_BFLAGS_PSCI			(1 <<  0)
+#define ACPI_FADT_ARM_BFLAGS_PSCI_HVC			(1 <<  1)
 typedef struct acpi_fadt {
 	struct acpi_sdt_hdr hdr;
 	__u32 facs_paddr;
@@ -169,12 +169,12 @@ typedef struct acpi_fadt {
 	__u8 day_alarm;
 	__u8 month_alarm;
 	__u8 century;
-	__u16 x86_boot_flags;
+	__u16 x86_bflags;
 	__u8 reserved1;
 	__u32 flags;
 	acpi_gas_t rst_reg;
 	__u8 rst_val;
-	__u16 arm_boot_flags;
+	__u16 arm_bflags;
 	__u8 minor_version;
 	__u64 xfacs_paddr;
 	__u64 xdsdt_paddr;

@@ -142,7 +142,7 @@ static void ukreloc_mp_init(void)
 		       (void *)x86_start16_addr);
 }
 
-int lcpu_arch_mp_init(void *arg __unused)
+int lcpu_arch_mp_init(void)
 {
 	__lcpuid bsp_cpu_id = lcpu_get(0)->id;
 	union {
@@ -167,17 +167,17 @@ int lcpu_arch_mp_init(void *arg __unused)
 		m.h = (acpi_subsdt_hdr_t *)(madt->entries + off);
 
 		switch (m.h->type) {
-		case MADT_LAPIC:
-			if (!(m.lapic->flags & MADT_LAPIC_FLAGS_ENABLED) &&
-			    !(m.lapic->flags & MADT_LAPIC_FLAGS_ONLINE_CAPABLE))
+		case ACPI_MADT_LAPIC:
+			if (!(m.lapic->flags & ACPI_MADT_LAPIC_FLAGS_EN) &&
+			    !(m.lapic->flags & ACPI_MADT_LAPIC_FLAGS_ONLINE_CAP))
 				continue; /* goto next MADT entry */
 
 			cpu_id = m.lapic->lapic_id;
 			break;
 
-		case MADT_LX2APIC:
-			if (!(m.x2apic->flags & MADT_X2APIC_FLAGS_ENABLED) &&
-			    !(m.x2apic->flags & MADT_X2APIC_FLAGS_ONLINE_CAPABLE))
+		case ACPI_MADT_LX2APIC:
+			if (!(m.x2apic->flags & ACPI_MADT_X2APIC_FLAGS_EN) &&
+			    !(m.x2apic->flags & ACPI_MADT_X2APIC_FLAGS_ONLINE_CAP))
 				continue; /* goto next MADT entry */
 
 			cpu_id = m.x2apic->lapic_id;

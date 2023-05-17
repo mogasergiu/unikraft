@@ -360,10 +360,9 @@ void __noreturn lcpu_arch_jump_to(void *sp, ukplat_lcpu_entry_t entry);
  * The bootstrap processor is already allocated with index 0 and must not be
  * added.
  *
- * @param arg an optional parameter from the boot code. Can be NULL
  * @return 0 on success, -errno otherwise
  */
-int lcpu_arch_mp_init(void *arg);
+int lcpu_arch_mp_init(void);
 
 /**
  * Start the given logical CPU. The CPU should execute the entry function

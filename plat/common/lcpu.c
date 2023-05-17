@@ -341,7 +341,7 @@ int lcpu_mp_init(unsigned long run_irq, unsigned long wakeup_irq, void *arg)
 	/* Initialize architecture-dependent functionality. This will also do
 	 * CPU discovery and allocation
 	 */
-	rc = lcpu_arch_mp_init(arg);
+	rc = lcpu_arch_mp_init();
 	if (unlikely(rc))
 		return rc;
 

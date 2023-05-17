@@ -25,6 +25,7 @@
 #include <uk/arch/paging.h>
 #include <uk/plat/common/sections.h>
 #include <uk/plat/common/bootinfo.h>
+#include <uk/plat/common/acpi.h>
 #include <uk/plat/lcpu.h>
 #include <uk/plat/common/lcpu.h>
 #include <uart/pl011.h>
@@ -55,7 +56,7 @@
 
 smccc_conduit_fn_t smccc_psci_call;
 
-static void _dtb_get_psci_method(void *fdt)
+static int _dtb_get_psci_method(void *fdt)
 {
 	int fdtpsci, len;
 	const char *fdtmethod;
@@ -91,11 +92,49 @@ static void _dtb_get_psci_method(void *fdt)
 		goto enomethod;
 	}
 	uk_pr_info("PSCI method: %s\n", fdtmethod);
-	return;
+	return 0;
 
 enomethod:
 	uk_pr_info("Support PSCI from PSCI-0.2\n");
 	smccc_psci_call = NULL;
+	return -ENOENT;
+}
+
+static int acpi_get_psci_method()
+{
+#ifdef CONFIG_UKPLAT_ACPI
+	acpi_fadt_t *acpi_fadt = acpi_get_fadt();
+
+	if (unlikely(!acpi_fadt))
+		return -ENOTSUP;
+
+	if (unlikely(!(acpi_fadt->arm_bflags & ACPI_FADT_ARM_BFLAGS_PSCI)))
+		return -ENOTSUP;
+
+	if (acpi_fadt->arm_bflags & ACPI_FADT_ARM_BFLAGS_PSCI_HVC)
+		smccc_psci_call = smccc_hvc;
+	else
+		smccc_psci_call = smccc_smc;
+
+	return 0;
+#else
+	return -ENOTSUP;
+#endif
+}
+
+
+static int get_psci_method(struct ukplat_bootinfo *bi)
+{
+	int rc;
+
+	rc = acpi_init();
+	if (!rc)
+		rc = acpi_get_psci_method();
+
+	if (unlikely(rc < 0) && likely(bi->dtb))
+		return _dtb_get_psci_method(bi->dtb);
+
+	return rc;
 }
 
 static char *cmdline;
@@ -122,7 +161,7 @@ static inline int cmdline_init(struct ukplat_bootinfo *bi)
 					 UKPLAT_MEMRF_WRITE |
 					 UKPLAT_MEMRF_MAP);
 	if (unlikely(!cmdline))
-		UK_CRASH("Could not allocate scratch command-line memory");
+		return -ENOMEM;
 
 	memcpy(cmdline, cmdl, cmdline_len);
 	cmdline[cmdline_len] = 0;
@@ -160,8 +199,7 @@ void __no_pauth _ukplat_entry(struct ukplat_bootinfo *bi)
 		UK_CRASH("Boot stack alloc failed\n");
 	bstack = (void *)((__uptr)bstack + __STACK_SIZE);
 
-	/* Get PSCI method from DTB */
-	_dtb_get_psci_method(fdt);
+	get_psci_method(bi);
 
 	/* Initialize paging */
 	rc = ukplat_mem_init();

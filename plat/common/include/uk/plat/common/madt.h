@@ -32,28 +32,28 @@
  *
  */
 
-#ifndef __PLAT_CMN_X86_MADT_H__
-#define __PLAT_CMN_X86_MADT_H__
+#ifndef __PLAT_CMN_X86_ACPI_MADT_H__
+#define __PLAT_CMN_X86_ACPI_MADT_H__
 
 #include "sdt.h"
 
-#define MADT_LAPIC				0x00
-#define MADT_IO_APIC				0x01
-#define MADT_INT_SRC_OVERRIDE			0x02
-#define MADT_NMI_SOURCE				0x03
-#define MADT_LAPIC_NMI				0x04
-#define MADT_LAPIC_ADDRESS_OVERRIDE		0x05
-#define MADT_IO_SAPIC				0x06
-#define MADT_LSAPIC				0x07
-#define MADT_PLATFORM_INT_SOURCES		0x08
-#define MADT_LX2APIC				0x09
-#define MADT_LX2APIC_NMI			0x0a
-#define MADT_GICC				0x0b
-#define MADT_GICD				0x0c
-#define MADT_GIC_MSI				0x0d
-#define MADT_GICR				0x0e
-#define MADT_GIC_ITS				0x0f
-#define MADT_MP_WAKEUP				0x10
+#define ACPI_MADT_LAPIC					0x00
+#define ACPI_MADT_IO_APIC				0x01
+#define ACPI_MADT_INT_SRC_OVERRIDE			0x02
+#define ACPI_MADT_NMI_SOURCE				0x03
+#define ACPI_MADT_LAPIC_NMI				0x04
+#define ACPI_MADT_LAPIC_ADDR_OVERRIDE			0x05
+#define ACPI_MADT_IO_SAPIC				0x06
+#define ACPI_MADT_LSAPIC				0x07
+#define ACPI_MADT_PLAT_INT_SOURCES			0x08
+#define ACPI_MADT_LX2APIC				0x09
+#define ACPI_MADT_LX2APIC_NMI				0x0a
+#define ACPI_MADT_GICC					0x0b
+#define ACPI_MADT_GICD					0x0c
+#define ACPI_MADT_GIC_MSI				0x0d
+#define ACPI_MADT_GICR					0x0e
+#define ACPI_MADT_GIC_ITS				0x0f
+#define ACPI_MADT_MP_WAKEUP				0x10
 
 /*
  * The following structures are declared according to the ACPI
@@ -64,15 +64,14 @@
  */
 
 /* Processor Local APIC Structure */
+#define ACPI_MADT_LAPIC_FLAGS_EN			0x01
+#define ACPI_MADT_LAPIC_FLAGS_ONLINE_CAP		0x02
 typedef struct acpi_madt_lapic {
         struct acpi_subsdt_hdr hdr;
 	__u8 cpu_id;
         __u8 lapic_id;
 	__u32 flags;
 } __packed acpi_madt_lapic_t;
-
-#define MADT_LAPIC_FLAGS_ENABLED			0x01
-#define MADT_LAPIC_FLAGS_ONLINE_CAPABLE			0x02
 
 /* I/O APIC Structure */
 typedef struct acpi_madt_ioapic {
@@ -156,10 +155,9 @@ typedef struct acpi_madt_x2apic {
 	__u32 uid;
 } __packed acpi_madt_x2apic_t;
 
-#define MADT_X2APIC_FLAGS_ENABLED			0x01
-#define MADT_X2APIC_FLAGS_ONLINE_CAPABLE		0x02
-
 /* Local x2APIC NMI Structure */
+#define ACPI_MADT_X2APIC_FLAGS_EN			0x01
+#define ACPI_MADT_X2APIC_FLAGS_ONLINE_CAP		0x02
 typedef struct acpi_madt_x2apic_nmi {
         struct acpi_subsdt_hdr hdr;
 	__u16 mps_inti_flags;
@@ -169,6 +167,9 @@ typedef struct acpi_madt_x2apic_nmi {
 } __packed acpi_madt_x2apic_nmi_t;
 
 /* GIC CPU Interface (GICC) Structure */
+#define ACPI_MADT_GICC_FLAGS_EN				0x01
+#define ACPI_MADT_GICC_FLAGS_PERF_IRQ_MODE		0x02
+#define ACPI_MADT_GICC_FLAGS_VGIC_IRQ_MODE		0x03
 typedef struct acpi_madt_gicc {
         struct acpi_subsdt_hdr hdr;
 	__u16 reserved;
@@ -236,4 +237,4 @@ typedef struct acpi_madt_mp_wakeup_src {
 	__u64 mbox_paddr;
 } __packed acpi_madt_mp_wakeup_src_t;
 
-#endif /* __PLAT_CMN_X86_MADT_H__ */
+#endif /* __PLAT_CMN_X86_ACPI_MADT_H__ */
