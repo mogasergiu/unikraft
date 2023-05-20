@@ -1509,7 +1509,7 @@ int ukplat_paging_init(void)
 
 		rc = ukplat_page_map(&kernel_pt, vaddr, paddr,
 				     len >> PAGE_SHIFT, prot, 0);
-		if (unlikely(rc && rc != -EEXIST))
+		if (unlikely(rc))
 			return rc;
 	}
 
