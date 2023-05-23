@@ -34,6 +34,7 @@
 #include <gic/gic.h>
 #include <gic/gic-v2.h>
 #include <gic/gic-v3.h>
+#include <uk/plat/common/acpi.h>
 
 /** Sanity check for GIC driver availability */
 #if !defined(CONFIG_LIBGICV2) && !defined(CONFIG_LIBGICV3)
@@ -78,3 +79,46 @@ uint32_t gic_irq_translate(uint32_t type, uint32_t irq)
 
 	return (uint32_t)-1;
 }
+
+#if defined(CONFIG_UKPLAT_ACPI)
+int acpi_get_gicd(struct _gic_dev *g)
+{
+	union {
+		acpi_madt_gicd_t *gicd;
+		acpi_subsdt_hdr_t *h;
+	} m;
+	acpi_madt_t *madt;
+	__sz off, len;
+
+	/* Enumerate all other CPUs */
+	madt = acpi_get_madt();
+	UK_ASSERT(madt);
+
+	/* We do not count the Redistributor regions, instead we rely on QEMU
+	 * Virt having its GICv3 in an always-on power domain so that we are
+	 * aligned with the current state of the driver, which only supports
+	 * contiguous GIC Redistributors...
+	 */
+	len = madt->hdr.tab_len - sizeof(*madt);
+	for (off = 0; off < len; off += m.h->len) {
+		m.h = (acpi_subsdt_hdr_t *)(madt->entries + off);
+
+		if (m.h->type != ACPI_MADT_GICD)
+			continue;
+
+		if (m.gicd->version == ACPI_MADT_GICD_VERSION_2)
+			g->dist_mem_size = GICD_V2_MEM_SZ;
+		else if (m.gicd->version == ACPI_MADT_GICD_VERSION_3)
+			g->dist_mem_size = GICD_V3_MEM_SZ;
+		else
+			return -ENOTSUP;
+
+		g->dist_mem_addr = m.gicd->paddr;
+
+		/* We assume we only have one redistributor region */
+		return 0;
+	}
+
+	return -ENOENT;
+}
+#endif /* CONFIG_UKPLAT_ACPI */
