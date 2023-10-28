@@ -371,6 +371,17 @@ void ukplat_memregion_list_coalesce(struct ukplat_memregion_list *list)
 				 */
 				UK_ASSERT(ml->flags == mr->flags);
 
+				/* We do not allow overlaps of memory regions
+				 * whose resource page offset into their region
+				 * is not equal to 0. Regions don't that meet
+				 * this condition are hand-inserted by us and
+				 * should not overlap.
+				 */
+				UK_ASSERT(!ml->pg_off);
+				UK_ASSERT(!mr->pg_off);
+				UK_ASSERT(!(ml->pbase & ~PAGE_MASK));
+				UK_ASSERT(!(mr->pbase & ~PAGE_MASK));
+
 				/* If the left region is contained within the
 				 * right region, drop it
 				 */
@@ -422,6 +433,17 @@ void ukplat_memregion_list_coalesce(struct ukplat_memregion_list *list)
 			   mr_prio != MRD_PRIO_KRNL_RSRC &&
 			   ml->pbase + ml->len == mr->pbase &&
 			   ml_prio == mr_prio && ml->flags == mr->flags) {
+			/* We do not allow overlaps of memory regions
+			 * whose resource page offset into their region
+			 * is not equal to 0. Regions don't that meet
+			 * this condition are hand-inserted by us and
+			 * should not overlap.
+			 */
+			UK_ASSERT(!ml->pg_off);
+			UK_ASSERT(!mr->pg_off);
+			UK_ASSERT(!(ml->pbase & ~PAGE_MASK));
+			UK_ASSERT(!(mr->pbase & ~PAGE_MASK));
+
 			uk_pr_debug("Merging two contiguous mrd's.\n");
 			ml->len += mr->len;
 			ml->pg_count = PAGE_COUNT(ml->len);
