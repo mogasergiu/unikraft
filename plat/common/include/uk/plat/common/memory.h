@@ -133,9 +133,11 @@ ukplat_memregion_list_insert_legacy_hi_mem(struct ukplat_memregion_list *list)
 	 */
 	rc = ukplat_memregion_list_insert(list,
 			&(struct ukplat_memregion_desc){
-				.vbase = X86_HI_MEM_START,
 				.pbase = X86_HI_MEM_START,
+				.vbase = X86_HI_MEM_START,
+				.pg_off = 0,
 				.len   = X86_HI_MEM_LEN,
+				.pg_count = PAGE_COUNT(X86_HI_MEM_LEN),
 				.type  = UKPLAT_MEMRT_RESERVED,
 				.flags = UKPLAT_MEMRF_READ  |
 					 UKPLAT_MEMRF_WRITE |
@@ -149,9 +151,11 @@ ukplat_memregion_list_insert_legacy_hi_mem(struct ukplat_memregion_list *list)
 	 */
 	rc = ukplat_memregion_list_insert(list,
 			&(struct ukplat_memregion_desc){
-				.vbase = X86_BIOS_ROM_START,
 				.pbase = X86_BIOS_ROM_START,
+				.vbase = X86_BIOS_ROM_START,
+				.pg_off = 0,
 				.len   = X86_BIOS_ROM_LEN,
+				.pg_count = PAGE_COUNT(X86_BIOS_ROM_LEN),
 				.type  = UKPLAT_MEMRT_RESERVED,
 				.flags = UKPLAT_MEMRF_READ  |
 					 UKPLAT_MEMRF_MAP,

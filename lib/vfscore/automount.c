@@ -213,8 +213,8 @@ static int vfscore_mount_initrd_volume(struct vfscore_volume *vv)
 		return -1;
 	}
 
-	return do_mount_initrd((void *)initrd->vbase, initrd->len,
-			       vv->path);
+	return do_mount_initrd((void *)initrd->vbase + initrd->pg_off,
+			       initrd->len, vv->path);
 }
 #endif /* CONFIG_LIBUKCPIO && CONFIG_LIBRAMFS */
 
