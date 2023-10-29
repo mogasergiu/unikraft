@@ -189,6 +189,24 @@ struct ukplat_memregion_desc {
 		UK_ASSERT(!(mrd)->pg_off);				\
 	} while (0);							\
 
+/** UK_ASSERT_VALID_KERNEL_MRD(mrd) macro
+ *
+ * Ensure kernel memory region descriptor particular correctness:
+ * - must meed the criterias of a general valid memory region descriptor
+ * - region is aligned end-to-end, therefore length is multiple of
+ * PAGE_SIZE times region's page count and the resource's
+ * in-page offset must be 0
+ *
+ * @param mrd pointer to the kernel memory region descriptor to validate
+ */
+#define UK_ASSERT_VALID_KERNEL_MRD(mrd)					\
+	do {								\
+		UK_ASSERT_VALID_MRD((mrd));				\
+		UK_ASSERT((mrd)->type == UKPLAT_MEMRT_KERNEL);		\
+		UK_ASSERT((mrd)->pg_count * PAGE_SIZE == (mrd)->len);	\
+		UK_ASSERT(!(mrd)->pg_off);				\
+	} while (0);							\
+
 /**
  * Check whether the memory region descriptor overlaps with [pstart, pend) in
  * the physical address space.
