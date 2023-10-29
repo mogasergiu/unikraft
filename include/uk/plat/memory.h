@@ -33,9 +33,10 @@
 #ifndef __UKPLAT_MEMORY_H__
 #define __UKPLAT_MEMORY_H__
 
-#include <uk/essentials.h>
-#include <uk/arch/types.h>
 #include <uk/alloc.h>
+#include <uk/arch/paging.h>
+#include <uk/arch/types.h>
+#include <uk/essentials.h>
 #include <uk/config.h>
 
 #ifdef __cplusplus
@@ -146,6 +147,27 @@ struct ukplat_memregion_desc {
 									\
 		UK_ASSERT(((mrd)->flags & flags_all) == (mrd)->flags);	\
 	} while(0);
+
+/** UK_ASSERT_VALID_MRD(mrd) macro
+ *
+ * Ensure memory region descriptor general correctness:
+ * - must be of only one valid type as per UK_ASSERT_VALID_MRD_TYPE
+ * - must only have valid flags as per UK_ASSERT_VALID_MRD_FLAGS
+ * - memory region is not empty or of length 0
+ * - virtual/physical base addresses are page-aligned
+ * - resource in-page offset must be in the range [0, PAGE_SIZE)
+ *
+ * @param mrd pointer to the free memory region descriptor to validate
+ */
+#define UK_ASSERT_VALID_MRD(mrd)					\
+	do {								\
+		UK_ASSERT_VALID_MRD_TYPE((mrd));			\
+		UK_ASSERT_VALID_MRD_FLAGS((mrd));			\
+		UK_ASSERT(PAGE_ALIGNED((mrd)->vbase));			\
+		UK_ASSERT(PAGE_ALIGNED((mrd)->pbase));			\
+		UK_ASSERT((mrd)->pg_off >= 0 &&				\
+			  (mrd)->pg_off < (__off)PAGE_SIZE);		\
+	} while (0);
 
 /**
  * Check whether the memory region descriptor overlaps with [pstart, pend) in
