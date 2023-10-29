@@ -88,6 +88,42 @@ struct ukplat_memregion_desc {
 #endif /* CONFIG_UKPLAT_MEMRNAME */
 } __packed __align(__SIZEOF_LONG__);
 
+/** UK_ASSERT_VALID_MRD_TYPE(mrd) macro
+ *
+ * Ensure a given memory region descriptor has one of the following defined
+ * types only:
+ *	UKPLAT_MEMRT_FREE		0x0001	Uninitialized memory
+ *	UKPLAT_MEMRT_RESERVED		0x0002	In use by platform
+ *	UKPLAT_MEMRT_KERNEL		0x0004	Kernel binary segment
+ *	UKPLAT_MEMRT_INITRD		0x0008	Initramdisk
+ *	UKPLAT_MEMRT_CMDLINE		0x0010	Command line
+ *	UKPLAT_MEMRT_DEVICETREE		0x0020	Device tree
+ *	UKPLAT_MEMRT_STACK		0x0040	Thread stack
+ * @param mrd pointer to the memory region descriptor whose type to validate
+ */
+#define UK_ASSERT_VALID_MRD_TYPE(mrd)					\
+	do {								\
+		switch ((mrd)->type & UKPLAT_MEMRT_ANY) {			\
+		case UKPLAT_MEMRT_FREE:					\
+			__fallthrough;					\
+		case UKPLAT_MEMRT_RESERVED:				\
+			__fallthrough;					\
+		case UKPLAT_MEMRT_KERNEL:				\
+			__fallthrough;					\
+		case UKPLAT_MEMRT_INITRD:				\
+			__fallthrough;					\
+		case UKPLAT_MEMRT_CMDLINE:				\
+			__fallthrough;					\
+		case UKPLAT_MEMRT_DEVICETREE:				\
+			__fallthrough;					\
+		case UKPLAT_MEMRT_STACK:				\
+			break;						\
+		default:						\
+			UK_CRASH("Invalid mrd type: %hu\n",		\
+				 (mrd)->type);				\
+		}							\
+	} while(0);
+
 /**
  * Check whether the memory region descriptor overlaps with [pstart, pend) in
  * the physical address space.
