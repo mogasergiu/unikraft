@@ -570,6 +570,8 @@ int ukplat_mem_init(void)
 			       __PAGE_SIZE);
 	for (i = (int)bi->mrds.count - 1; i >= 0; i--) {
 		ukplat_memregion_get(i, &mrdp);
+		UK_ASSERT_VALID_MRD(mrdp);
+
 		if (mrdp->vbase >= unmap_end) {
 			/* Region is outside the mapped area */
 			uk_pr_info("Memory %012lx-%012lx outside mapped area\n",
