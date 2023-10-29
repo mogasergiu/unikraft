@@ -212,6 +212,7 @@ static int vfscore_mount_initrd_volume(struct vfscore_volume *vv)
 
 		return -1;
 	}
+	UK_ASSERT_VALID_MRD(initrd);
 
 	return do_mount_initrd((void *)initrd->vbase + initrd->pg_off,
 			       initrd->len, vv->path);
