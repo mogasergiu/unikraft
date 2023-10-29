@@ -169,6 +169,26 @@ struct ukplat_memregion_desc {
 			  (mrd)->pg_off < (__off)PAGE_SIZE);		\
 	} while (0);
 
+/** UK_ASSERT_VALID_FREE_MRD(mrd) macro
+ *
+ * Ensure free memory region descriptor particular correctness:
+ * - must meed the criterias of a general valid memory region descriptor
+ * - virtual/physical base addresses are equal
+ * - region is aligned end-to-end, therefore length is multiple of
+ * PAGE_SIZE times region's page count and the resource's
+ * in-page offset must be 0
+ *
+ * @param mrd pointer to the free memory region descriptor to validate
+ */
+#define UK_ASSERT_VALID_FREE_MRD(mrd)					\
+	do {								\
+		UK_ASSERT_VALID_MRD((mrd));				\
+		UK_ASSERT((mrd)->type == UKPLAT_MEMRT_FREE);		\
+		UK_ASSERT((mrd)->vbase == (mrd)->pbase);		\
+		UK_ASSERT((mrd)->pg_count * PAGE_SIZE == (mrd)->len);	\
+		UK_ASSERT(!(mrd)->pg_off);				\
+	} while (0);							\
+
 /**
  * Check whether the memory region descriptor overlaps with [pstart, pend) in
  * the physical address space.
