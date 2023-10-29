@@ -79,9 +79,11 @@ void *ukplat_memregion_alloc(__sz size, int type, __u16 flags)
 	desired_sz = size;
 	size = ALIGN_UP(size, __PAGE_SIZE);
 	ukplat_memregion_foreach(&mrd, UKPLAT_MEMRT_FREE, 0, 0) {
+		UK_ASSERT_VALID_FREE_MRD(mrd);
 		UK_ASSERT(mrd->pbase <= __U64_MAX - size);
+
 		pstart = ALIGN_UP(mrd->pbase, __PAGE_SIZE);
-		pend   = pstart + size;
+		pend = pstart + size;
 
 		if (unmap_len &&
 		    (!RANGE_CONTAIN(unmap_start, unmap_len, pstart, size) ||
@@ -93,7 +95,7 @@ void *ukplat_memregion_alloc(__sz size, int type, __u16 flags)
 			return NULL;
 
 		ostart = mrd->pbase;
-		olen   = mrd->len;
+		olen = mrd->len;
 
 		/* Check whether we are allocating from an in-image memory hole
 		 * or not. If no, then it is not already mapped.
