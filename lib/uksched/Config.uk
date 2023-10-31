@@ -12,6 +12,10 @@ if LIBUKSCHED
 		bool
 		default n
 
+	config LIBUKSCHED_AUXSP_SIZE
+		int "Maximum size allocated for the per-thread auxiliary stack"
+		default 32768
+
 	config LIBUKSCHED_DEBUG
 		bool "Enable debug messages"
 		default n

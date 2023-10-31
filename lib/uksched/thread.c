@@ -44,6 +44,11 @@
 #include <uk/print.h>
 #include <uk/assert.h>
 #include <uk/arch/tls.h>
+#ifdef CONFIG_LIBUKVMEM
+#include <uk/arch/paging.h>
+#include <uk/vmem.h>
+#endif /* CONFIG_LIBUKVMEM*/
+
 
 #if CONFIG_LIBUKSCHED_TCB_INIT && !CONFIG_UKARCH_TLS_HAVE_TCB
 #error CONFIG_LIBUKSCHED_TCB_INIT requires that a TLS contains reserved space for a TCB
@@ -223,16 +228,43 @@ void uk_thread_set_exited(struct uk_thread *t)
 	t->flags |= UK_THREADF_EXITED;
 }
 
-static void _uk_thread_struct_init(struct uk_thread *t,
-				   uintptr_t tlsp,
-				   bool is_uktls,
-				   struct ukarch_ectx *ectx,
-				   const char *name,
-				   void *priv,
-				   uk_thread_dtor_t dtor)
+static int _uk_thread_struct_init(struct uk_thread *t,
+				  uintptr_t tlsp,
+				  bool is_uktls,
+				  struct ukarch_ectx *ectx,
+				  const char *name,
+				  void *priv,
+				  uk_thread_dtor_t dtor)
 {
+	__sz auxsp_len = ALIGN_UP(CONFIG_LIBUKSCHED_AUXSP_SIZE,
+				  UKARCH_SP_ALIGN);
+	void *auxsp = NULL;
+	int rc;
+
 	/* TLS pointer required if is_uktls is set */
 	UK_ASSERT(!is_uktls || tlsp);
+
+	auxsp = uk_memalign(uk_alloc_get_default(), UKARCH_SP_ALIGN, auxsp_len);
+	if (unlikely(!auxsp)) {
+		uk_pr_err("Failed to allocate auxiliary stack\n");
+		return -ENOMEM;
+	}
+
+#if CONFIG_LIBUKVMEM
+	__uptr auxsp_base = PAGE_ALIGN_DOWN((__uptr)auxsp);
+	/* Ensure the buffer is backed by physical memory */
+	rc = uk_vma_advise(uk_vas_get_active(),
+			   auxsp_base,
+			   PAGE_ALIGN_UP((__uptr)auxsp + auxsp_len -
+					 auxsp_base),
+			   UK_VMA_ADV_WILLNEED,
+			   UK_VMA_FLAG_UNINITIALIZED);
+	if (unlikely(rc)) {
+		uk_pr_err("Failed to prematurely map auxiliary stack for "
+			  "thread %s\n", name);
+		return rc;
+	}
+#endif /* CONFIG_LIBUKVMEM */
 
 	memset(t, 0x0, sizeof(*t));
 
@@ -242,6 +274,7 @@ static void _uk_thread_struct_init(struct uk_thread *t,
 	t->priv = priv;
 	t->dtor = dtor;
 	t->exec_time = 0;
+	t->auxsp = (__uptr)auxsp + auxsp_len;
 
 	if (tlsp && is_uktls) {
 		t->flags |= UK_THREADF_UKTLS;
@@ -255,6 +288,8 @@ static void _uk_thread_struct_init(struct uk_thread *t,
 	uk_pr_debug("uk_thread %p (%s): ctx:%p, ectx:%p, tlsp:%p\n",
 		    t, t->name ? t->name : "<unnamed>",
 		    &t->ctx, t->ectx, (void *) t->tlsp);
+
+	return 0;
 }
 
 int uk_thread_init_bare(struct uk_thread *t,
@@ -267,10 +302,18 @@ int uk_thread_init_bare(struct uk_thread *t,
 			void *priv,
 			uk_thread_dtor_t dtor)
 {
+	int rc;
+
 	UK_ASSERT(t);
 	UK_ASSERT(t != uk_thread_current());
 
-	_uk_thread_struct_init(t, tlsp, is_uktls, ectx, name, priv, dtor);
+	rc = _uk_thread_struct_init(t, tlsp, is_uktls, ectx, name, priv, dtor);
+	if (unlikely(rc)) {
+		uk_pr_err("Failed to initialize %s thread structure: %d\n",
+			  name, rc);
+		return rc;
+	}
+
 	ukarch_ctx_init_bare(&t->ctx, sp, ip);
 
 	if (ip)
@@ -289,14 +332,22 @@ int uk_thread_init_bare_fn0(struct uk_thread *t,
 			    void *priv,
 			    uk_thread_dtor_t dtor)
 {
+	int rc;
+
 	UK_ASSERT(t);
 	UK_ASSERT(t != uk_thread_current());
 	UK_ASSERT(sp); /* stack pointer is required for ctx_entry */
 	UK_ASSERT(fn);
 
-	_uk_thread_struct_init(t, tlsp, is_uktls, ectx, name, priv, dtor);
-	ukarch_ctx_init_entry0(&t->ctx, sp, 0,
-			       (ukarch_ctx_entry0) fn);
+	rc = _uk_thread_struct_init(t, tlsp, is_uktls, ectx, name, priv, dtor);
+	if (unlikely(rc)) {
+		uk_pr_err("Failed to initialize %s thread structure: %d\n",
+			  name, rc);
+		return rc;
+	}
+
+	ukarch_ctx_init_entry0(&t->ctx, sp, 0, (ukarch_ctx_entry0)fn);
+
 	uk_thread_set_runnable(t);
 
 	return _uk_thread_call_inittab(t);
@@ -313,15 +364,23 @@ int uk_thread_init_bare_fn1(struct uk_thread *t,
 			    void *priv,
 			    uk_thread_dtor_t dtor)
 {
+	int rc;
+
 	UK_ASSERT(t);
 	UK_ASSERT(t != uk_thread_current());
 	UK_ASSERT(sp); /* stack pointer is required for ctx_entry */
 	UK_ASSERT(fn);
 
-	_uk_thread_struct_init(t, tlsp, is_uktls, ectx, name, priv, dtor);
-	ukarch_ctx_init_entry1(&t->ctx, sp, 0,
-			       (ukarch_ctx_entry1) fn,
-			       (long) argp);
+	rc = _uk_thread_struct_init(t, tlsp, is_uktls, ectx, name, priv, dtor);
+	if (unlikely(rc)) {
+		uk_pr_err("Failed to initialize %s thread structure: %d\n",
+			  name, rc);
+		return rc;
+	}
+
+	ukarch_ctx_init_entry1(&t->ctx, sp, 0, (ukarch_ctx_entry1)fn,
+			      (long) argp);
+
 	uk_thread_set_runnable(t);
 
 	return _uk_thread_call_inittab(t);
@@ -338,15 +397,23 @@ int uk_thread_init_bare_fn2(struct uk_thread *t,
 			    void *priv,
 			    uk_thread_dtor_t dtor)
 {
+	int rc;
+
 	UK_ASSERT(t);
 	UK_ASSERT(t != uk_thread_current());
 	UK_ASSERT(sp); /* stack pointer is required for ctx_entry */
 	UK_ASSERT(fn);
 
-	_uk_thread_struct_init(t, tlsp, is_uktls, ectx, name, priv, dtor);
-	ukarch_ctx_init_entry2(&t->ctx, sp, 0,
-			       (ukarch_ctx_entry2) fn,
-			       (long) argp0, (long) argp1);
+	rc = _uk_thread_struct_init(t, tlsp, is_uktls, ectx, name, priv, dtor);
+	if (unlikely(rc)) {
+		uk_pr_err("Failed to initialize %s thread structure: %d\n",
+			  name, rc);
+		return rc;
+	}
+
+	ukarch_ctx_init_entry2(&t->ctx, sp, 0, (ukarch_ctx_entry2)fn,
+				    (long) argp0, (long) argp1);
+
 	uk_thread_set_runnable(t);
 
 	return _uk_thread_call_inittab(t);
@@ -407,7 +474,12 @@ static int _uk_thread_struct_init_alloc(struct uk_thread *t,
 		tlsp = ukarch_tls_tlsp(tls);
 	}
 
-	_uk_thread_struct_init(t, tlsp, !(!tlsp), ectx, name, priv, dtor);
+	rc = _uk_thread_struct_init(t, tlsp, !(!tlsp), ectx, name, priv, dtor);
+	if (unlikely(rc)) {
+		uk_pr_err("Failed to initialize %s thread structure: %d\n",
+			  name, rc);
+		goto err_free_stack;
+	}
 
 	/* Set uk_thread fields related to stack and TLS */
 	if (stack) {
@@ -720,7 +792,13 @@ struct uk_thread *uk_thread_create_container2(struct uk_alloc *a,
 						       + sizeof(*t),
 						       ukarch_ectx_align());
 
-	_uk_thread_struct_init(t, tlsp, is_uktls, ectx, name, priv, dtor);
+	ret = _uk_thread_struct_init(t, tlsp, is_uktls, ectx, name, priv, dtor);
+	if (unlikely(ret)) {
+		uk_pr_err("Failed to initialize %s thread structure: %d\n",
+			  name, ret);
+		goto err_out;
+	}
+
 	t->_mem.t_a = a;
 
 	/* Minimal context initialization where the stack pointer

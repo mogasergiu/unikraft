@@ -59,6 +59,7 @@ struct uk_thread {
 	struct ukarch_ectx *ectx;	/**< Extended context (FPU, VPU, ...) */
 	uintptr_t           tlsp;	/**< Current active TLS pointer */
 	__uptr            uktlsp;	/**< Unikraft TLS pointer */
+	__uptr		   auxsp;	/**< Unikraft Auxiliary Stack Pointer */
 
 	UK_TAILQ_ENTRY(struct uk_thread) queue;
 	uint32_t flags;

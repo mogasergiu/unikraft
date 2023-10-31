@@ -207,7 +207,7 @@ int uk_sched_start(struct uk_sched *s)
 	main_thread = uk_thread_create_bare(s->a,
 					    0x0, 0x0, tlsp, !(!tlsp), false,
 					    "init", NULL, NULL);
-	if (!main_thread) {
+	if (unlikely(!main_thread || !main_thread->auxsp)) {
 		ret = -ENOMEM;
 		goto err_out;
 	}
