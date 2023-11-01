@@ -259,5 +259,22 @@ void ukarch_ectx_load(struct ukarch_ectx *state);
 void ukarch_ectx_assert_equal(struct ukarch_ectx *state);
 #endif
 
+/**
+ * Stores the userland context of the current thread to `state`.
+ * Such userland context can be restored with `ukarch_ulctx_load()`.
+ *
+ * @param state
+ *   Reference to userland context to save to
+ */
+void ukarch_ulctx_store(struct ukarch_ulctx *state);
+
+/**
+ * Restores a given userland context on the currently executing CPU.
+ *
+ * @param state
+ *   Reference to userland context to restore
+ */
+void ukarch_ulctx_load(struct ukarch_ulctx *state);
+
 #endif /* !__ASSEMBLY__ */
 #endif /* __UKARCH_CTX_H__ */
