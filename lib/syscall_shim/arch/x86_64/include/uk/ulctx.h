@@ -31,4 +31,8 @@ void ukarch_ulctx_switchoff_tls(struct ukarch_ulctx *ulctx);
 void ukarch_ulctx_switchon_tls(struct ukarch_ulctx *ulctx);
 #endif /* CONFIG_LIBSYSCALL_SHIM_HANDLER_ULTLS */
 
+void ukarch_ulctx_switchoff(struct ukarch_ulctx *ulctx);
+
+void ukarch_ulctx_switchon(struct ukarch_ulctx *ulctx);
+
 #endif /* !__ASSEMBLY__ */
