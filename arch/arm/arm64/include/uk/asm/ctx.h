@@ -71,3 +71,15 @@
 		__sp__ &= ~((unsigned long) UKARCH_SP_ALIGN_MASK);	\
 		__sp__;							\
 	})
+
+
+/* This tells someone who may check the flags field whether this context
+ * is that of a thread whose execution is inside a system call or not
+ */
+#define UKARCH_ULCTX_FLAGS_INSYSCALL				(1 << 0)
+
+/* Architecture specific userland context */
+struct ukarch_ulctx {
+	struct __regs *r;
+	__u64 flags;
+};

@@ -52,3 +52,19 @@
 		__sp__ &= ~((unsigned long) UKARCH_SP_ALIGN_MASK);	\
 		__sp__;							\
 	})
+
+/* This tells someone who may check the flags field whether this context
+ * is that of a thread whose execution is inside a system call or not
+ */
+#define UKARCH_ULCTX_FLAGS_INSYSCALL				(1 << 0)
+
+/* Architecture specific userland context */
+struct ukarch_ulctx {
+	struct __regs *r;
+
+	/* The current value of %gs's gs_base register of the application.
+	 * On syscall entry, this will be updated to hold the value of
+	 * MSR_KERNEL_GS_BASE following a swapgs instruction */
+	__uptr gs_base;
+	__u64 flags;
+};
