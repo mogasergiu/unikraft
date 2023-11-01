@@ -196,6 +196,11 @@ __lcpuid ukplat_lcpu_id(void)
 	return lcpu_arch_id();
 }
 
+__uptr ukplat_lcpu_get_auxsp(void)
+{
+	return lcpu_get_current()->auxsp;
+}
+
 #ifdef CONFIG_HAVE_SMP
 #ifdef CONFIG_UKPLAT_LCPU_IDISIDX
 /* For many VMMs the CPU ID is simply a sequentially increasing number with
