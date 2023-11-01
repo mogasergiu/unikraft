@@ -11,6 +11,24 @@
 #include <uk/plat/common/cpu.h>
 #include <uk/thread.h>
 
+void ukarch_ulctx_switchoff(struct ukarch_ulctx *ulctx)
+{
+	UK_ASSERT(ulctx);
+
+#if CONFIG_LIBSYSCALL_SHIM_HANDLER_ULTLS
+	ukarch_ulctx_switchoff_tls(ulctx);
+#endif /* CONFIG_LIBSYSCALL_SHIM_HANDLER_ULTLS */
+}
+
+void ukarch_ulctx_switchon(struct ukarch_ulctx *ulctx)
+{
+	UK_ASSERT(ulctx);
+
+#if CONFIG_LIBSYSCALL_SHIM_HANDLER_ULTLS
+	ukarch_ulctx_switchon_tls(ulctx);
+#endif /* CONFIG_LIBSYSCALL_SHIM_HANDLER_ULTLS */
+}
+
 #if CONFIG_LIBSYSCALL_SHIM_HANDLER_ULTLS
 __uptr ukarch_ulctx_get_tlsp(struct ukarch_ulctx *ulctx)
 {
