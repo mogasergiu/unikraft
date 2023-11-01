@@ -118,6 +118,11 @@ __lcpuid ukplat_lcpu_id(void);
  */
 __uptr ukplat_lcpu_get_auxsp(void);
 
+/**
+ * Sets the auxiliary stack pointer of the current logical cpu
+ */
+void ukplat_lcpu_set_auxsp(__uptr auxsp);
+
 #ifdef CONFIG_HAVE_SMP
 
 struct ukplat_lcpu_func {
