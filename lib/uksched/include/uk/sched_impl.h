@@ -96,6 +96,7 @@ void uk_sched_thread_switch(struct uk_thread *next)
 	prev->tlsp = ukplat_tlsp_get();
 	if (prev->ectx)
 		ukarch_ectx_store(prev->ectx);
+	ukarch_ulctx_store(&prev->ulctx);
 
 	/* Load next TLS and extended registers before context switch.
 	 * This avoids requiring special initialization code for newly
@@ -104,6 +105,7 @@ void uk_sched_thread_switch(struct uk_thread *next)
 	ukplat_tlsp_set(next->tlsp);
 	if (next->ectx)
 		ukarch_ectx_load(next->ectx);
+	ukarch_ulctx_load(&next->ulctx);
 
 	ukplat_lcpu_set_auxsp(next->auxsp);
 
