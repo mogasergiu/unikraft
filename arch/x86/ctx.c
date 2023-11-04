@@ -31,6 +31,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <string.h>
 #include <uk/config.h>
 #include <uk/arch/ctx.h>
 #if CONFIG_LIBUKDEBUG
@@ -42,32 +43,36 @@
 #endif /* !CONFIG_LIBUKDEBUG */
 
 /* Assembler functions */
+void ctx_x86_popregs_iretq(void);
 void _ctx_x86_clearregs(void);
 void _ctx_x86_call0(void);
 void _ctx_x86_call1(void);
 void _ctx_x86_call2(void);
 
 void ukarch_ctx_init(struct ukarch_ctx *ctx,
-		     __uptr sp, int keep_regs,
+		     __uptr sp, struct __regs *r,
 		     __uptr ip)
 {
-	__uptr _sp;
-
 	UK_ASSERT(ctx);
 	UK_ASSERT(sp);			/* a stack is needed */
 	UK_ASSERT(ip);			/* NULL as IP will cause a crash */
-	UK_ASSERT(!keep_regs && sp);	/* a stack is needed when clearing */
 
-	_sp = ukarch_rstack_push(sp, (long) ip);
-	if (keep_regs) {
-		ukarch_ctx_init_bare(ctx, _sp, (long) _ctx_x86_call0);
+	if (r) {
+		/* Copy the saved registers on the stack so that the stack
+		 * popping registers off the stack can restore them for us.
+		 */
+		sp -= sizeof(*r) + __REGS_PAD_SIZE;  /* Make room */
+		memcpy_isr((void *)sp, (void *)r, sizeof(*r));
+
+		ukarch_ctx_init_bare(ctx, sp, (long)ctx_x86_popregs_iretq);
 	} else {
-		_sp = ukarch_rstack_push(_sp, (long) _ctx_x86_call0);
-		ukarch_ctx_init_bare(ctx, _sp, (long) _ctx_x86_clearregs);
+		sp = ukarch_rstack_push(sp, (long)ip);
+		sp = ukarch_rstack_push(sp, (long)_ctx_x86_call0);
+		ukarch_ctx_init_bare(ctx, sp, (long)_ctx_x86_clearregs);
 	}
 
 	uk_pr_debug("ukarch_ctx %p: start:%p sp:%p\n",
-		    ctx, (void *) ip, (void *) sp);
+		    ctx, (void *)ip, (void *)sp);
 }
 
 void ukarch_ctx_init_entry0(struct ukarch_ctx *ctx,

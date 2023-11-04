@@ -116,7 +116,7 @@ static inline void ukarch_ctx_init_bare(struct ukarch_ctx *ctx,
  *   Instruction pointer to start execution (required)
  */
 void ukarch_ctx_init(struct ukarch_ctx *ctx,
-		     __uptr sp, int keep_regs,
+		     __uptr sp, struct __regs *r,
 		     __uptr ip);
 
 /**

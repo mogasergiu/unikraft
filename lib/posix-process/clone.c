@@ -468,9 +468,10 @@ static int _clone(struct clone_args *cl_args, size_t cl_args_len,
 	 * returns `0` in the child.
 	 */
 	ukarch_ctx_init(&child->ctx,
-			(__uptr) cl_args->stack,
-			false,
+			(__uptr)cl_args->stack,
+			NULL,
 			return_addr);
+
 	uk_thread_set_runnable(child);
 
 	/* We will return the child's thread ID in the parent */
