@@ -78,6 +78,12 @@
  */
 #define UKARCH_ULCTX_FLAGS_INSYSCALL				(1 << 0)
 
+/* This is set if this userland context appertains to a thread
+ * that has just been created through a clone() system call and has yet to
+ * be scheduled to run
+ */
+#define UKARCH_ULCTX_FLAGS_NEWCLONE				(1 << 1)
+
 /* Architecture specific userland context */
 struct ukarch_ulctx {
 	struct __regs *r;
