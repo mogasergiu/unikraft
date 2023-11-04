@@ -28,8 +28,7 @@
 /* Some parts are derived from Mini-OS arch/x86/x86_64.S */
 
 #include <uk/arch/ctx.h>
-
-#define ENTRY(X) .globl X ; X :
+#include <uk/asm.h>
 
 ENTRY(_ctx_x86_clearregs)
 	/* wipe argument and return registers */
