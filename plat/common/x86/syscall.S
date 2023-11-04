@@ -35,8 +35,6 @@
 #include <uk/asm/cfi.h>
 #include <uk/plat/common/lcpu.h>
 
-#define ENTRY(X) .globl X ; X :
-
 ENTRY(_ukplat_syscall)
 	.cfi_startproc simple
 	.cfi_def_cfa rsp, 0
