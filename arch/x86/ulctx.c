@@ -13,6 +13,7 @@
 void ukarch_ulctx_store(struct ukarch_ulctx *ulctx)
 {
 	UK_ASSERT(ulctx);
+	UK_ASSERT(!(ulctx->flags & UKARCH_ULCTX_FLAGS_NEWCLONE));
 
 	if (!(ulctx->flags & UKARCH_ULCTX_FLAGS_INSYSCALL))
 		return;
@@ -37,6 +38,13 @@ void ukarch_ulctx_load(struct ukarch_ulctx *ulctx)
 	 * X86_MSR_KERNEL_GS_BASE should contain the preserved app
 	 * gs_base register value.
 	 */
-	wrmsrl(X86_MSR_GS_BASE, lcpu_get_current());
-	wrmsrl(X86_MSR_KERNEL_GS_BASE, ulctx->gs_base);
+	if (ulctx->flags & UKARCH_ULCTX_FLAGS_NEWCLONE) {
+		wrmsrl(X86_MSR_KERNEL_GS_BASE, (__u64)lcpu_get_current());
+		wrmsrl(X86_MSR_GS_BASE, ulctx->gs_base);
+
+		ulctx->flags &= ~UKARCH_ULCTX_FLAGS_NEWCLONE;
+	} else {
+		wrmsrl(X86_MSR_GS_BASE, (__u64)lcpu_get_current());
+		wrmsrl(X86_MSR_KERNEL_GS_BASE, ulctx->gs_base);
+	}
 }
