@@ -28,6 +28,7 @@
 /* Some parts are derived from Mini-OS arch/x86/x86_64.S */
 
 #include <uk/arch/ctx.h>
+#include <uk/arch/lcpu.h>
 #include <uk/asm.h>
 
 ENTRY(_ctx_x86_clearregs)
@@ -101,3 +102,32 @@ ENTRY(ukarch_ctx_switch)
 	popq %rbx
 	popq %rbp
 	ret
+
+/* Used to pop the contents of a `struct __regs` off the stack */
+ENTRY(ctx_x86_popregs_iretq)
+	/* Do all this with IRQ's disabled, as the final iretq should pop off
+	 * a proper rflags anyway.
+	 */
+	cli
+
+	addq	$(__REGS_PAD_SIZE), %rsp
+
+	popq	%r15
+	popq	%r14
+	popq	%r13
+	popq	%r12
+	popq	%rbp
+	popq	%rbx
+	popq	%r11
+	popq	%r10
+	popq	%r9
+	popq	%r8
+	popq	%rax
+	popq	%rcx
+	popq	%rdx
+	popq	%rsi
+	popq	%rdi
+
+	addq	$(__REGS_PAD_SIZE), %rsp
+
+	iretq
