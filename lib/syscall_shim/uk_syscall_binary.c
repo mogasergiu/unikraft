@@ -58,6 +58,7 @@ void ukplat_syscall_handler(struct __regs *r)
 	__u8 ectxbuf[ukarch_ectx_size() + ectx_align];
 	struct ukarch_ectx *ectx = (struct ukarch_ectx *)
 					 ALIGN_UP((__uptr) ectxbuf, ectx_align);
+	struct ukarch_ulctx *ulctx = &uk_thread_current()->ulctx;
 #if CONFIG_LIBSYSCALL_SHIM_STRACE
 #if CONFIG_LIBSYSCALL_SHIM_STRACE_ANSI_COLOR
 	char prsyscallbuf[512]; /* ANSI color is pretty hungry */
@@ -68,6 +69,10 @@ void ukplat_syscall_handler(struct __regs *r)
 #endif /* CONFIG_LIBSYSCALL_SHIM_STRACE */
 
 	UK_ASSERT(r);
+
+	ulctx->r = r;
+	ulctx->flags |= UKARCH_ULCTX_FLAGS_INSYSCALL;
+	ukarch_ulctx_store(ulctx);
 
 	/* Save extended register state */
 	ukarch_ectx_sanitize(ectx);
@@ -130,4 +135,6 @@ void ukplat_syscall_handler(struct __regs *r)
 
 	/* Restore extended register state */
 	ukarch_ectx_load(ectx);
+	ukarch_ulctx_load(ulctx);
+	ulctx->flags &= ~UKARCH_ULCTX_FLAGS_INSYSCALL;
 }
