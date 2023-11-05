@@ -177,6 +177,32 @@ typedef long uk_syscall_arg_t;
 #define __UK_SYSCALL_PRINTD(...) do {} while(0)
 #endif /* CONFIG_LIBSYSCALL_SHIM_DEBUG || CONFIG_LIBUKDEBUG_PRINTD */
 
+#define UK_SYSCALL_SAVE_ULCTX_PROLOGUE(name)				\
+	static void __noreturn	__attribute__((optimize("omit-frame-pointer"))) dummy_##name##_sym() \
+	{								\
+		__asm__ __volatile__(					\
+		"nop\n\t"						\
+		".globl "STRINGIFY(__UK_NAME2SCALLE_FN(name))"\n\t"	\
+		".globl "STRINGIFY(__UK_NAME2SCALLR_FN(name))"\n\t"	\
+		".align 2\n\t"						\
+		""STRINGIFY(__UK_NAME2SCALLE_FN(name))":\n\t"		\
+		"nop\n\t"						\
+		""STRINGIFY(__UK_NAME2SCALLR_FN(name))":\n\t"		\
+		"cli\n\t"						\
+		"swapgs\n\t"						\
+		"movq   %%rsp, %%gs:(0x18)\n\t"			\
+		"movq	%%gs:(0x10), %%rsp\n\t"			\
+		"pushq	$(0x10)\n\t"					\
+		"subq	$8, %%rsp\n\t"					\
+		"pushq	%%rdi\n\t"					\
+		"movq	%%gs:(0x18), %%rdi\n\t"			\
+		"popq	%%rdi\n\t"					\
+		"pushfq\n\t"						\
+		"pushq	$(0x8)\n\t"					\
+		::							\
+		);							\
+	}
+
 /* System call implementation that uses errno and returns -1 on errors */
 /* TODO: `void` as return type is currently not supported.
  * NOTE: Workaround is to use `int` instead.
@@ -225,6 +251,15 @@ typedef long uk_syscall_arg_t;
 			     name,					\
 			     __UK_NAME2SCALLE_FN(name),			\
 			     __UK_NAME2SCALLR_FN(name),			\
+			     __VA_ARGS__)
+
+#define UK_LLSYSCALL_U_DEFINE(rtype, name, ...)				\
+	UK_SYSCALL_SAVE_ULCTX_PROLOGUE(name)				\
+	_UK_LLSYSCALL_DEFINE(UK_NARGS(__VA_ARGS__),			\
+			     rtype,					\
+			     u_##name,					\
+			     __UK_NAME2SCALLE_FN(u_##name),		\
+			     __UK_NAME2SCALLR_FN(u_##name),		\
 			     __VA_ARGS__)
 
 /*

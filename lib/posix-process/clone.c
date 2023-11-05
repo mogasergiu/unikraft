@@ -564,7 +564,7 @@ err_out:
 }
 
 #if CONFIG_ARCH_X86_64
-UK_LLSYSCALL_R_DEFINE(int, clone,
+UK_LLSYSCALL_U_DEFINE(int, clone,
 		      unsigned long, flags,
 		      void *, sp,
 		      int *, parent_tid,
