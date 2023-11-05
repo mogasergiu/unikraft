@@ -276,5 +276,9 @@ void ukarch_ulctx_store(struct ukarch_ulctx *state);
  */
 void ukarch_ulctx_load(struct ukarch_ulctx *state);
 
+__uptr ukarch_ulctx_get_tlsp(struct ukarch_ulctx *u);
+
+void ukarch_ulctx_set_tlsp(struct ukarch_ulctx *u, __uptr tlsp);
+
 #endif /* !__ASSEMBLY__ */
 #endif /* __UKARCH_CTX_H__ */

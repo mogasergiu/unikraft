@@ -9,6 +9,7 @@
 #include <uk/assert.h>
 #include <uk/essentials.h>
 #include <uk/plat/common/cpu.h>
+#include <uk/thread.h>
 
 void ukarch_ulctx_store(struct ukarch_ulctx *ulctx)
 {
@@ -48,3 +49,22 @@ void ukarch_ulctx_load(struct ukarch_ulctx *ulctx)
 		wrmsrl(X86_MSR_KERNEL_GS_BASE, ulctx->gs_base);
 	}
 }
+
+#if CONFIG_LIBSYSCALL_SHIM_HANDLER_ULTLS
+__uptr ukarch_ulctx_get_tlsp(struct ukarch_ulctx *u)
+{
+	UK_ASSERT(u);
+
+	return u->fs_base;
+}
+
+void ukarch_ulctx_set_tlsp(struct ukarch_ulctx *u, __uptr tlsp)
+{
+	UK_ASSERT(u);
+
+	uk_pr_debug("System call updated userland TLS pointer register to %p (before: %p)\n",
+		    (void *)u->fs_base, (void *)tlsp);
+
+	u->fs_base = tlsp;
+}
+#endif /* CONFIG_LIBSYSCALL_SHIM_HANDLER_ULTLS */
