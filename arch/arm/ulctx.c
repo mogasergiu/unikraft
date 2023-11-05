@@ -9,6 +9,7 @@
 #include <uk/assert.h>
 #include <uk/essentials.h>
 #include <uk/plat/common/cpu.h>
+#include <uk/thread.h>
 
 void ukarch_ulctx_store(struct ukarch_ulctx *ulctx)
 {
@@ -19,3 +20,19 @@ void ukarch_ulctx_load(struct ukarch_ulctx *ulctx)
 {
 	UK_ASSERT(ulctx);
 }
+
+#if CONFIG_LIBSYSCALL_SHIM_HANDLER_ULTLS
+__uptr ukarch_ulctx_get_tlsp(struct ukarch_ulctx *u)
+{
+	UK_ASSERT(u);
+
+	return u->tpidr_el0;
+}
+
+void ukarch_ulctx_set_tlsp(struct ukarch_ulctx *u, __uptr tlsp)
+{
+	UK_ASSERT(u);
+
+	u->tpidr_el0 = tlsp;
+}
+#endif /* CONFIG_LIBSYSCALL_SHIM_HANDLER_ULTLS */
