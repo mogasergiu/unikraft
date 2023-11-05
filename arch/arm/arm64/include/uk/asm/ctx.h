@@ -87,5 +87,9 @@
 /* Architecture specific userland context */
 struct ukarch_ulctx {
 	struct __regs *r;
+
+#if CONFIG_LIBSYSCALL_SHIM_HANDLER_ULTLS
+	__uptr tpidr_el0;
+#endif /* CONFIG_LIBSYSCALL_SHIM_HANDLER_ULTLS */
 	__u64 flags;
 };
