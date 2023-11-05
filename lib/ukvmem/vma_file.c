@@ -53,13 +53,6 @@ int vma_op_file_new(struct uk_vas *vas, __vaddr_t vaddr __unused,
 	if ((*flags & UK_VMA_FILE_SHARED) && (attr & PAGE_ATTR_PROT_WRITE))
 		return -ENOTSUP;
 
-	/* Since we cannot do ISR-safe file accesses in the fault handler,
-	 * we enforce full load at mapping time for now.
-	 *
-	 * TODO: Remove this restriction if possible.
-	 */
-	*flags |= UK_VMA_MAP_POPULATE;
-
 	vma_file = uk_malloc(vas->a, sizeof(struct uk_vma_file));
 	if (unlikely(!vma_file))
 		return -ENOMEM;
@@ -89,6 +82,43 @@ static void vma_op_file_destroy(struct uk_vma *vma)
 
 	UK_ASSERT(vma_file->f);
 	fdrop(vma_file->f);
+}
+
+typedef void (*uk_thread_ptrap_fn)(void *);
+void uk_thread_call_ptrap_fn(uk_thread_ptrap_fn fn, void *fn_arg)
+{
+	__sz ectx_align = ukarch_ectx_align();
+	__u8 ectxbuf[ukarch_ectx_size() + ectx_align];
+	struct ukarch_ectx *ectx = (struct ukarch_ectx *)
+					ALIGN_UP((__uptr)ectxbuf, ectx_align);
+
+	ukarch_ectx_store(ectx);
+	ukarch_ectx_sanitize(ectx);
+	ukarch_ulctx_store(&uk_thread_current()->ulctx);
+	fn(fn_arg);
+	ukarch_ulctx_load(&uk_thread_current()->ulctx);
+	ukarch_ectx_load(ectx);
+}
+
+void ctx_x86_popregs_iretq();
+void uk_thread_setup_ptrap(struct __regs *regs,
+			   uk_thread_ptrap_fn fn, void *fn_arg)
+{
+	struct uk_thread *t = uk_thread_current();
+	__u8 *ptrap_sp = t->auxsp;
+
+	if (t->auxsp >= regs->rsp &&
+		regs->rsp >= t->auxsp - CONFIG_LIBUKSCHED_AUXSP_SIZE)
+		ptrap_sp = regs->rsp & ~0xf;
+
+	memcpy_isr(ptrap_sp - sizeof(*regs), regs, sizeof(*regs));
+	ptrap_sp -= sizeof(*regs);
+	ptrap_sp = ukarch_rstack_push(ptrap_sp, &ctx_x86_popregs_iretq);
+
+	regs->rip = &uk_thread_call_ptrap_fn;
+	regs->rsp = (unsigned long)ptrap_sp;
+	regs->rdi = fn;
+	regs->rsi = fn_arg;
 }
 
 static int vma_file_read(struct vfscore_file *fp, __vaddr_t buf, __sz len,
@@ -121,6 +151,43 @@ static int vma_file_read(struct vfscore_file *fp, __vaddr_t buf, __sz len,
 	return 0;
 }
 
+static struct uk_vma_file deferred_vma;
+static struct uk_vm_fault deferred_fault;
+
+static void vma_op_file_fault_do_read(void)
+{
+	struct uk_vma_file *vma_file = &deferred_vma;
+	struct uk_pagetable * const pt = deferred_vma.base.vas->pt;
+	struct uk_vm_fault *fault = &deferred_fault;
+	unsigned long pages = fault->len / PAGE_SIZE;
+	__paddr_t paddr = fault->paddr;
+	__vaddr_t vaddr;
+	__sz bytes;
+	__off off;
+	int rc;
+
+	UK_ASSERT(fault->len == PAGE_Lx_SIZE(fault->level));
+	UK_ASSERT(fault->type & UK_VMA_FAULT_NONPRESENT);
+
+	vaddr = ukplat_page_kmap(pt, paddr, pages, 0);
+	if (unlikely(vaddr == __VADDR_INV))
+		pt->fa->ffree(pt->fa, paddr, pages);
+
+	off = (fault->vbase - vma_file->base.start) + vma_file->offset;
+
+	rc = vma_file_read(vma_file->f, vaddr, fault->len, off, &bytes);
+	if (unlikely(rc)) {
+		ukplat_page_kunmap(pt, vaddr, pages, 0);
+		pt->fa->ffree(pt->fa, paddr, pages);
+	}
+
+	/* Fill the remaining space with zeros */
+	UK_ASSERT(fault->len >= bytes);
+
+	memset_isr((void *)(vaddr + bytes), 0, fault->len - bytes);
+	ukplat_page_kunmap(pt, vaddr, pages, 0);
+}
+
 static int vma_op_file_fault(struct uk_vma *vma, struct uk_vm_fault *fault)
 {
 	struct uk_vma_file *vma_file = (struct uk_vma_file *)vma;
@@ -140,31 +207,17 @@ static int vma_op_file_fault(struct uk_vma *vma, struct uk_vm_fault *fault)
 	if (unlikely(rc))
 		return rc;
 
-	if (!(vma->flags & UK_VMA_FLAG_UNINITIALIZED)) {
-		vaddr = ukplat_page_kmap(pt, paddr, pages, 0);
-		if (unlikely(vaddr == __VADDR_INV)) {
-			pt->fa->ffree(pt->fa, paddr, pages);
-			return -ENOMEM;
-		}
+	fault->paddr = paddr;
+	memcpy_isr(&deferred_fault, fault, sizeof(deferred_fault));
+	memcpy_isr(&deferred_vma, vma, sizeof(deferred_vma));
 
-		off = (fault->vbase - vma->start) + vma_file->offset;
-
-		rc = vma_file_read(vma_file->f, vaddr, fault->len, off, &bytes);
-		if (unlikely(rc)) {
-			ukplat_page_kunmap(pt, vaddr, pages, 0);
-			pt->fa->ffree(pt->fa, paddr, pages);
-
-			return rc;
-		}
-
-		/* Fill the remaining space with zeros */
-		UK_ASSERT(fault->len >= bytes);
-
-		memset_isr((void *)(vaddr + bytes), 0, fault->len - bytes);
-		ukplat_page_kunmap(pt, vaddr, pages, 0);
+	if (vma->flags & UK_VMA_FAULT_SOFT) {
+		vma_op_file_fault_do_read();
+		return 0;
 	}
 
-	fault->paddr = paddr;
+	uk_thread_setup_ptrap(fault->regs, &vma_op_file_fault_do_read, NULL);
+
 	return 0;
 }
 
