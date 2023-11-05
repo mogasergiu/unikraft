@@ -437,7 +437,7 @@ static int _clone(struct clone_args *cl_args, size_t cl_args_len,
 
 	if ((flags & CLONE_SETTLS)
 #if CONFIG_LIBSYSCALL_SHIM_HANDLER_ULTLS
-	    && (uk_syscall_ultlsp() == 0x0)
+	    && (ukarch_ulctx_get_tlsp(&t->ulctx) == 0x0)
 #endif /* CONFIG_LIBSYSCALL_SHIM_HANDLER_ULTLS */
 	) {
 		/* The caller already created a TLS for the child (for instance
@@ -462,7 +462,7 @@ static int _clone(struct clone_args *cl_args, size_t cl_args_len,
 		 * places TLS variables and uses them effectively as TCB.
 		 */
 #if CONFIG_LIBSYSCALL_SHIM_HANDLER_ULTLS
-		if (uk_syscall_ultlsp() != 0x0) {
+		if (ukarch_ulctx_get_tlsp(&t->ulctx) != 0x0) {
 			uk_pr_debug("Allocating an Unikraft TLS for the new child, parent called from context with custom TLS\n");
 		} else
 #endif /* CONFIG_LIBSYSCALL_SHIM_HANDLER_ULTLS */
@@ -519,6 +519,9 @@ static int _clone(struct clone_args *cl_args, size_t cl_args_len,
 	 * somehow, unexpectedly, try to access this current stack frame.
 	 */
 	child->ulctx.r = &child_regs;
+	if (child->ulctx.flags & UKARCH_ULCTX_FLAGS_INSYSCALL)
+		ukarch_ulctx_set_tlsp(&child->ulctx, child->tlsp);
+
 	clone_setup_arch_ulctx(&child->ulctx,
 			       return_addr, (__uptr)cl_args->stack);
 	child->ulctx.r = NULL;
