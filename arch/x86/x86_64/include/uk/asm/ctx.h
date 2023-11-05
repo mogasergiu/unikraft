@@ -72,5 +72,8 @@ struct ukarch_ulctx {
 	 * On syscall entry, this will be updated to hold the value of
 	 * MSR_KERNEL_GS_BASE following a swapgs instruction */
 	__uptr gs_base;
+#if CONFIG_LIBSYSCALL_SHIM_HANDLER_ULTLS
+	__uptr fs_base;
+#endif /* CONFIG_LIBSYSCALL_SHIM_HANDLER_ULTLS */
 	__u64 flags;
 };
