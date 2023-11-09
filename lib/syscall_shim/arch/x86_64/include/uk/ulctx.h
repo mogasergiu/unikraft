@@ -25,6 +25,10 @@ UK_CTASSERT(sizeof(struct ukarch_ulctx) == UKARCH_ULCTX_SIZE);
 __uptr ukarch_ulctx_get_tlsp(struct ukarch_ulctx *ulctx);
 
 void ukarch_ulctx_set_tlsp(struct ukarch_ulctx *ulctx, __uptr tlsp);
+
+void ukarch_ulctx_switchoff_tls(struct ukarch_ulctx *ulctx);
+
+void ukarch_ulctx_switchon_tls(struct ukarch_ulctx *ulctx);
 #endif /* CONFIG_LIBSYSCALL_SHIM_HANDLER_ULTLS */
 
 #endif /* !__ASSEMBLY__ */

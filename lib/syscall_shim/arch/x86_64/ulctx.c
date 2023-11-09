@@ -29,4 +29,27 @@ void ukarch_ulctx_set_tlsp(struct ukarch_ulctx *ulctx, __uptr tlsp)
 
 	ulctx->fs_base = tlsp;
 }
+
+void ukarch_ulctx_switchoff_tls(struct ukarch_ulctx *ulctx)
+{
+	struct uk_thread *t = uk_thread_current();
+
+	UK_ASSERT(ulctx);
+	UK_ASSERT(t);
+
+	ulctx->fs_base = ukplat_tlsp_get();
+	ukplat_tlsp_set(t->uktlsp);
+	t->tlsp = t->uktlsp;
+}
+
+void ukarch_ulctx_switchon_tls(struct ukarch_ulctx *ulctx)
+{
+	struct uk_thread *t = uk_thread_current();
+
+	UK_ASSERT(ulctx);
+	UK_ASSERT(t);
+
+	ukplat_tlsp_set(ulctx->fs_base);
+	t->tlsp = ulctx->fs_base;
+}
 #endif /* CONFIG_LIBSYSCALL_SHIM_HANDLER_ULTLS */
