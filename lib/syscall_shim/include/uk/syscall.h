@@ -42,10 +42,18 @@
 #include <stdarg.h>
 #include <uk/print.h>
 #include "legacy_syscall.h"
+#include <ulctx.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#if CONFIG_LIBSYSCALL_SHIM_HANDLER
+struct uk_syscall_regs {
+	struct __regs regs;
+	struct ukarch_ulctx ulctx;
+} __packed;
+#endif /* CONFIG_LIBSYSCALL_SHIM_HANDLER */
 
 /*
  * Whenever the hidden Config.uk option LIBSYSCALL_SHIM_NOWRAPPER
