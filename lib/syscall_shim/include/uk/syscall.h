@@ -35,6 +35,42 @@
 #ifndef __UK_SYSCALL_H__
 #define __UK_SYSCALL_H__
 
+#include <uk/ulctx.h>
+
+#if defined(__X86_64__)
+/* 512 for the actual structure + 64 bytes for the XSAVE header */
+#define UKARCH_ECTX_SAVE_MAX_SIZE			578
+#define UKARCH_ECTX_SAVE_MAX_ALIGN			64
+#elif defined(__ARM_64__)
+/* 32 * 2 * 8 bytes + 4 bytes (FPSR) + 4 bytes (FPCR) */
+#define UKARCH_ECTX_SAVE_MAX_SIZE			520
+#define UKARCH_ECTX_SAVE_MAX_ALIGN			16
+#else /* !__X86_64__ && !__ARM_64__ */
+#error "Undefined architecture"
+#endif
+
+/* We must make sure that ECTX is aligned, so we make use of some padding,
+ * whose size is equal to what we need to add to UKARCH_ECTX_SAVE_MAX_SIZE
+ * to make it aligned with UKARCH_ECTX_SAVE_MAX_ALIGN
+ */
+#define UK_SYSCALL_PAD_SIZE				\
+	(ALIGN_UP(UKARCH_ECTX_SAVE_MAX_SIZE,		\
+		 UKARCH_ECTX_SAVE_MAX_ALIGN) -		\
+	 UKARCH_ECTX_SAVE_MAX_SIZE)
+/* If we make sure that the in-memory structure's end address is aligned to
+ * the ECTX alignment, then subtracting from that end address a value that is
+ * also a multiple of that alignment, guarantees that the resulted address
+ * is also ECTX aligned.
+ */
+#define UK_SYSCALL_REGS_END_ALIGN			\
+	UKARCH_ECTX_SAVE_MAX_ALIGN
+#define UK_SYSCALL_REGS_SIZE				\
+	(UK_SYSCALL_PAD_SIZE +				\
+	 UKARCH_ECTX_SAVE_MAX_SIZE +			\
+	 UKARCH_ULCTX_SIZE +				\
+	 __REGS_SIZEOF)
+
+#if !__ASSEMBLY__
 #include <uk/config.h>
 #include <uk/essentials.h>
 #include <uk/errptr.h>
@@ -42,10 +78,22 @@
 #include <stdarg.h>
 #include <uk/print.h>
 #include "legacy_syscall.h"
+#include <uk/thread.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+struct uk_syscall_regs {
+	struct __regs regs;
+	struct ukarch_ulctx ulctx;
+	__u8 ectx[UKARCH_ECTX_SAVE_MAX_SIZE];
+	__u8 pad[UK_SYSCALL_PAD_SIZE];
+};
+
+UK_CTASSERT(sizeof(struct uk_syscall_regs) == UK_SYSCALL_REGS_SIZE);
+UK_CTASSERT(IS_ALIGNED(UK_SYSCALL_PAD_SIZE + UKARCH_ECTX_SAVE_MAX_SIZE,
+		       UKARCH_ECTX_SAVE_MAX_ALIGN));
 
 /*
  * Whenever the hidden Config.uk option LIBSYSCALL_SHIM_NOWRAPPER
@@ -595,5 +643,6 @@ int uk_vsnprsyscall(char *buf, __sz maxlen, int fmtf, long syscall_num,
 #ifdef __cplusplus
 }
 #endif
+#endif /* !__ASSEMBLY__ */
 
 #endif /* __UK_SYSCALL_H__ */
