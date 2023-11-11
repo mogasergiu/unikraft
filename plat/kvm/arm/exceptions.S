@@ -67,11 +67,16 @@
 .endm
 
 .macro ENTER_TRAP, el
+.if \el != 0
+	str x9, [sp, #-8]
+	mrs x9, sp_el0
+	str sp, [x9, #LCPU_SCRATCH_REG_OFFSET]
+	ldr sp, [x9, #LCPU_AUXSP_OFFSET]
+	add sp, sp, #CONFIG_UKPLAT_AUXSP_EL1_TRAP_SP_OFFSET
+	ldr x9, [x9, #LCPU_SCRATCH_REG_OFFSET]
 	sub sp, sp, #__TRAP_STACK_SIZE
-
-.if	\el != 0
-	/* Force align the stack, and save SP to __SP_OFFSET */
-	ALIGN_STACK
+	str x9, [sp, #__SP_OFFSET]
+	ldr x9, [x9, #-8]
 .endif
 
 	/* Save general purpose registers */
@@ -127,7 +132,9 @@
 	ldp x24, x25, [sp, #16 * 12]
 	ldp x22, x23, [sp, #16 * 11]
 	ldp x20, x21, [sp, #16 * 10]
-	/* Skip x18, x19 */
+.if	\el != 0
+	ldp x18, x19, [x19, #16 * 9]
+.endif
 	ldp x16, x17, [sp, #16 * 8]
 	ldp x14, x15, [sp, #16 * 7]
 	ldp x12, x13, [sp, #16 * 6]
@@ -145,16 +152,12 @@
 
 	/* Restore x18, x19 */
 	ldp x18, x19, [sp, #16 * 9]
-.else
-	/* Restore stack pointer for exception from EL1 */
-	ldr x18, [sp, #__SP_OFFSET]
-	mov x19, sp
-	mov sp, x18
 
-	/* Restore x18, x19 */
-	ldp x18, x19, [x19, #16 * 9]
-.endif
 	add sp, sp, #__TRAP_STACK_SIZE
+.else
+	ldr sp, [sp, #__SP_OFFSET]
+	ldr x9, [sp, #-8]
+.endif
 
 	eret
 .endm

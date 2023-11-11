@@ -278,7 +278,13 @@ static inline __uptr ukplat_auxsp_alloc(struct uk_alloc *a,
 	int rc;
 
 	if (!auxsp_len)
+#if !CONFIG_ARCH_ARM64
 		auxsp_len = ALIGN_UP(CONFIG_UKPLAT_AUXSP_SIZE, UKARCH_SP_ALIGN);
+#else /* CONFIG_ARCH_ARM64 */
+		auxsp_len = ALIGN_UP(CONFIG_UKPLAT_AUXSP_SIZE +
+				     CONFIG_UKPLAT_AUXSP_EL1_TRAP_SP_OFFSET,
+				     UKARCH_SP_ALIGN);
+#endif /* CONFIG_ARCH_ARM64 */
 
 	auxsp = uk_memalign(a, UKARCH_SP_ALIGN, auxsp_len);
 	if (unlikely(!auxsp)) {
