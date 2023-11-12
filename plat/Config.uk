@@ -128,3 +128,8 @@ config FPSIMD
 config UKPLAT_AUXSP_SIZE
 	int "Maximum size allocated for the auxiliary stack"
 	default 32768
+
+if ARCH_ARM64
+config UKPLAT_AUXSP_EL1_TRAP_SP_OFFSET
+	int "Offset from ARM64 syscall auxsp to non-syscall trap auxsp"
+	default 4096

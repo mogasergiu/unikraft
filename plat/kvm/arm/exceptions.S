@@ -68,15 +68,24 @@
 
 .macro ENTER_TRAP, el
 .if \el != 0
-	str x9, [sp, #-8]
+	stp x9, x10, [sp, #-16]
+
 	mrs x9, sp_el0
+	mrs x10, esr_el1
+
 	str sp, [x9, #LCPU_SCRATCH_REG_OFFSET]
 	ldr sp, [x9, #LCPU_AUXSP_OFFSET]
-	add sp, sp, #CONFIG_UKPLAT_AUXSP_EL1_TRAP_SP_OFFSET
+
+	and x10, x10, 0x00000000fc000000
+	mov x10, x10, lsr #26
+	cmp x10, #0x15
+	addneq sp, sp, #CONFIG_UKPLAT_AUXSP_EL1_TRAP_SP_OFFSET
+
 	ldr x9, [x9, #LCPU_SCRATCH_REG_OFFSET]
 	sub sp, sp, #__TRAP_STACK_SIZE
 	str x9, [sp, #__SP_OFFSET]
-	ldr x9, [x9, #-8]
+
+	ldp x9, x10, [x9, #-16]
 .endif
 
 	/* Save general purpose registers */
@@ -156,7 +165,7 @@
 	add sp, sp, #__TRAP_STACK_SIZE
 .else
 	ldr sp, [sp, #__SP_OFFSET]
-	ldr x9, [sp, #-8]
+	ldp x9, x10, [sp, #-16]
 .endif
 
 	eret
