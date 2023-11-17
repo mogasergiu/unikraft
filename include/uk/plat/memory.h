@@ -33,10 +33,14 @@
 #ifndef __UKPLAT_MEMORY_H__
 #define __UKPLAT_MEMORY_H__
 
+#include <stddef.h>
 #include <uk/essentials.h>
 #include <uk/arch/types.h>
 #include <uk/alloc.h>
 #include <uk/config.h>
+#if CONFIG_LIBUKVMEM
+#include <uk/vmem.h>
+#endif /* CONFIG_LIBUKVMEM */
 
 #ifdef __cplusplus
 extern "C" {
@@ -271,7 +275,9 @@ int ukplat_mem_init(void);
  *   Pointer to the allocated auxiliary stack
  */
 static inline __uptr ukplat_auxsp_alloc(struct uk_alloc *a,
+#if CONFIG_LIBUKVMEM
 					struct uk_vas __maybe_unused *vas,
+#endif /* CONFIG_LIBUKVMEM */
 					__sz auxsp_len)
 {
 	void *auxsp = NULL;
@@ -307,7 +313,7 @@ static inline __uptr ukplat_auxsp_alloc(struct uk_alloc *a,
 	}
 #endif /* CONFIG_LIBUKVMEM */
 
-	return (__uptr)ukarch_gen_sp(auxsp, auxsp_len;
+	return (__uptr)ukarch_gen_sp(auxsp, auxsp_len);
 }
 
 #ifdef __cplusplus
