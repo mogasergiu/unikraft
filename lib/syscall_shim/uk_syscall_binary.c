@@ -45,12 +45,6 @@
 
 void ukplat_syscall_handler(struct uk_syscall_regs *usr)
 {
-	/* Place backup of extended register state on stack */
-	__sz ectx_align = ukarch_ectx_align();
-	__u8 ectxbuf[ukarch_ectx_size() + ectx_align];
-	struct ukarch_ectx *ectx = (struct ukarch_ectx *)
-					 ALIGN_UP((__uptr) ectxbuf, ectx_align);
-	struct ukarch_ulctx *ulctx = &usr->ulctx;
 #if CONFIG_LIBSYSCALL_SHIM_STRACE
 #if CONFIG_LIBSYSCALL_SHIM_STRACE_ANSI_COLOR
 	char prsyscallbuf[512]; /* ANSI color is pretty hungry */
@@ -62,28 +56,22 @@ void ukplat_syscall_handler(struct uk_syscall_regs *usr)
 
 	UK_ASSERT(usr);
 
-	ukarch_ulctx_switchoff(ulctx);
-
 	/* Save extended register state */
-	ukarch_ectx_sanitize(ectx);
-	ukarch_ectx_store(ectx);
+	ukarch_ectx_sanitize(&usr->ectx);
+	ukarch_ectx_store(&usr->ectx);
 
-	/* uk_syscall6_r() will clear _uk_syscall_return_addr on return */
-	_uk_syscall_return_addr = usr->regs.rip;
+	ukarch_ulctx_switchoff(&usr->ulctx);
 
 #if CONFIG_LIBSYSCALL_SHIM_DEBUG_HANDLER
 	_uk_printd(uk_libid_self(), __STR_BASENAME__, __LINE__,
 			"Binary system call request \"%s\" (%lu) at ip:%p (arg0=0x%lx, arg1=0x%lx, ...)\n",
 		    uk_syscall_name(usr->regs.rsyscall), usr->regs.rsyscall,
-		    (void *) usr->regs.rip, usr->regs.rarg0, usr->regs.rarg1);
+		    (void *) usr->regs.rip, usr->regs.rarg0,
+		    usr->regs.rarg1);
 #endif /* CONFIG_LIBSYSCALL_SHIM_DEBUG_HANDLER */
-	usr->regs.rret0 = uk_syscall6_r(usr->regs.rsyscall,
-					usr->regs.rarg0,
-					usr->regs.rarg1,
-					usr->regs.rarg2,
-					usr->regs.rarg3,
-					usr->regs.rarg4,
-					usr->regs.rarg5);
+
+	usr->regs.rret0 = uk_syscall6_r_u(usr);
+
 #if CONFIG_LIBSYSCALL_SHIM_STRACE
 	prsyscalllen = uk_snprsyscall(prsyscallbuf, ARRAY_SIZE(prsyscallbuf),
 #if CONFIG_LIBSYSCALL_SHIM_STRACE_ANSI_COLOR
@@ -91,8 +79,9 @@ void ukplat_syscall_handler(struct uk_syscall_regs *usr)
 #else /* !CONFIG_LIBSYSCALL_SHIM_STRACE_ANSI_COLOR */
 		     UK_PRSYSCALL_FMTF_NEWLINE,
 #endif /* !CONFIG_LIBSYSCALL_SHIM_STRACE_ANSI_COLOR */
-		     usr->regs.rsyscall, usr->regs.rret0, usr->regs.rarg0, usr->regs.rarg1, usr->regs.rarg2,
-		     usr->regs.rarg3, usr->regs.rarg4, usr->regs.rarg5);
+		     usr->regs.rsyscall, usr->regs.rret0, usr->regs.rarg0,
+		     usr->regs.rarg1, usr->regs.rarg2, usr->regs.rarg3,
+		     usr->regs.rarg4, usr->regs.rarg5);
 	/*
 	 * FIXME:
 	 * We directly use `ukplat_coutk()` until lib/ukdebug printing
@@ -101,7 +90,8 @@ void ukplat_syscall_handler(struct uk_syscall_regs *usr)
 	ukplat_coutk(prsyscallbuf, (__sz) prsyscalllen);
 #endif /* CONFIG_LIBSYSCALL_SHIM_STRACE */
 
+	ukarch_ulctx_switchon(&usr->ulctx);
+
 	/* Restore extended register state */
-	ukarch_ectx_load(ectx);
-	ukarch_ulctx_switchon(ulctx);
+	ukarch_ectx_load(&usr->ectx);
 }

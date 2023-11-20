@@ -312,16 +312,6 @@ ENTRY(lcpu_start64)
 	leaq	lcpus(%rip), %rbp
 	addq	%rax, %rbp
 
-	/* Write current LCPU's struct lcpu pointer into KERNEL_GS_BASE MSR */
-	xorl    %edx, %edx
-	movl    %ebp, %eax
-	movq    %rbp, %rbx
-	shrq    $32, %rbx
-	movq    $X86_MSR_KERNEL_GS_BASE, %rcx
-	wrmsr
-	movq    $X86_MSR_GS_BASE, %rcx
-	wrmsr
-
 	/* Put CPU into init state */
 	movl	$LCPU_STATE_INIT, LCPU_STATE_OFFSET(%rbp)
 

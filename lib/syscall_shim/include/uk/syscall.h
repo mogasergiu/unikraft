@@ -35,6 +35,42 @@
 #ifndef __UK_SYSCALL_H__
 #define __UK_SYSCALL_H__
 
+#include <uk/ulctx.h>
+
+#if defined(__X86_64__)
+/* 512 for the actual structure + 64 bytes for the XSAVE header */
+#define UKARCH_ECTX_SAVE_MAX_SIZE			578
+#define UKARCH_ECTX_SAVE_MAX_ALIGN			64
+#elif defined(__ARM_64__)
+/* 32 * 2 * 8 bytes + 4 bytes (FPSR) + 4 bytes (FPCR) */
+#define UKARCH_ECTX_SAVE_MAX_SIZE			520
+#define UKARCH_ECTX_SAVE_MAX_ALIGN			16
+#else /* !__X86_64__ && !__ARM_64__ */
+#error "Undefined architecture"
+#endif
+
+/* We must make sure that ECTX is aligned, so we make use of some padding,
+ * whose size is equal to what we need to add to UKARCH_ECTX_SAVE_MAX_SIZE
+ * to make it aligned with UKARCH_ECTX_SAVE_MAX_ALIGN
+ */
+#define UK_SYSCALL_PAD_SIZE				\
+	(ALIGN_UP(UKARCH_ECTX_SAVE_MAX_SIZE,		\
+		 UKARCH_ECTX_SAVE_MAX_ALIGN) -		\
+	 UKARCH_ECTX_SAVE_MAX_SIZE)
+/* If we make sure that the in-memory structure's end address is aligned to
+ * the ECTX alignment, then subtracting from that end address a value that is
+ * also a multiple of that alignment, guarantees that the resulted address
+ * is also ECTX aligned.
+ */
+#define UK_SYSCALL_REGS_END_ALIGN			\
+	UKARCH_ECTX_SAVE_MAX_ALIGN
+#define UK_SYSCALL_REGS_SIZE				\
+	(UK_SYSCALL_PAD_SIZE +				\
+	 UKARCH_ECTX_SAVE_MAX_SIZE +			\
+	 UKARCH_ULCTX_SIZE +				\
+	 __REGS_SIZEOF)
+
+#if !__ASSEMBLY__
 #include <uk/config.h>
 #include <uk/essentials.h>
 #include <uk/errptr.h>
@@ -42,18 +78,21 @@
 #include <stdarg.h>
 #include <uk/print.h>
 #include "legacy_syscall.h"
-#include <ulctx.h>
+#include <uk/thread.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#if CONFIG_LIBSYSCALL_SHIM_HANDLER
 struct uk_syscall_regs {
 	struct __regs regs;
 	struct ukarch_ulctx ulctx;
+	__u8 ectx[UKARCH_ECTX_SAVE_MAX_SIZE];
+	__u8 pad[UK_SYSCALL_PAD_SIZE];
 } __packed;
-#endif /* CONFIG_LIBSYSCALL_SHIM_HANDLER */
+UK_CTASSERT(sizeof(struct uk_syscall_regs) == UK_SYSCALL_REGS_SIZE);
+UK_CTASSERT(IS_ALIGNED(UK_SYSCALL_PAD_SIZE + UKARCH_ECTX_SAVE_MAX_SIZE,
+		       UKARCH_ECTX_SAVE_MAX_ALIGN));
 
 /*
  * Whenever the hidden Config.uk option LIBSYSCALL_SHIM_NOWRAPPER
@@ -69,70 +108,42 @@ struct uk_syscall_regs {
 #endif /* CONFIG_LIBSYSCALL_SHIM && CONFIG_LIBSYSCALL_SHIM_NOWRAPPER */
 #endif /* UK_LIBC_SYSCALLS */
 
-#ifdef CONFIG_LIBSYSCALL_SHIM
-/**
- * Library-internal thread-local variable containing the return address
- * of the caller of the currently called system call.
- * NOTE: Use the `uk_syscall_return_addr()` macro to retrieve the return address
- *       within a system call implementation. Please note that this macro is
- *       only available if `lib/syscall_shim` is part of the build.
- *       This implies that every system call implementation that require to know
- *       the return address have a dependency to `lib/syscall_shim`.
- */
-extern __uk_tls __uptr _uk_syscall_return_addr;
-
-/**
- * Returns the return address of the currently called system call.
- */
-#define uk_syscall_return_addr()					\
-	((__uptr)((_uk_syscall_return_addr != 0x0)			\
-		  ? _uk_syscall_return_addr : __return_addr(0)))
-
-#define __UK_SYSCALL_RETADDR_ENTRY();					\
-	do { _uk_syscall_return_addr = uk_syscall_return_addr(); } while (0)
-
-#if CONFIG_LIBSYSCALL_SHIM_HANDLER_ULTLS
-/*
- * In the case the support for userland TLS pointers is enabled, we assume that
- * some system calls (like `arch_prctl` on `x86_64`) can change the TLS pointer.
- * In such a case, we need a safe way to access `_uk_syscall_return_addr` for
- * clearing after a system call handler was executed.
- */
-#include <uk/thread.h>
-
-#define __UK_SYSCALL_RETADDR_CLEAR();					\
-	do { (uk_thread_uktls_var(uk_thread_current(),			\
-				  _uk_syscall_return_addr)) = 0x0; } while (0)
-#else /* !CONFIG_LIBSYSCALL_SHIM_HANDLER_ULTLS */
-/* Without userland TLS pointer support, we assume that we do not have any
- * system call that changes the TLS pointer (harmfully). This means that we do
- * not need to rely on `lib/uksched`.
- */
-#define __UK_SYSCALL_RETADDR_CLEAR();					\
-	do { _uk_syscall_return_addr = 0x0; } while (0)
-#endif /* !CONFIG_LIBSYSCALL_SHIM_HANDLER_ULTLS */
-
-#else /* !CONFIG_LIBSYSCALL_SHIM */
-
-/*
- * NOTE: The usage of `uk_syscall_return_addr()` requires the `syscall_shim`
- *       library to be present. In order to avoid mis-configurations, we
- *       inject an always failing compile-time assertion to stop compilation.
- */
-#define uk_syscall_return_addr()					\
-	({ UK_CTASSERT(0x0); 0xDEADB0B0; })
-
-#define __UK_SYSCALL_RETADDR_ENTRY();					\
-	do { } while (0)
-#define __UK_SYSCALL_RETADDR_CLEAR();					\
-	do { } while (0)
-#endif /* !CONFIG_LIBSYSCALL_SHIM */
-
 #define __uk_scc(X) ((long) (X))
 typedef long uk_syscall_arg_t;
 
 #define __UK_NAME2SCALLE_FN(name) UK_CONCAT(uk_syscall_e_, name)
 #define __UK_NAME2SCALLR_FN(name) UK_CONCAT(uk_syscall_r_, name)
+
+#define UK_USR_MAP0(...)
+/* Taken from regmap_linuxabi.h */
+#if defined(__X86_64__)
+#define UK_USR_MAP2(m, type, arg) (type)usr->regs.rdi
+#define UK_USR_MAP4(m, type, arg, ...)					\
+	UK_USR_MAP2(m, __VA_ARGS__), (type)usr->regs.rsi
+#define UK_USR_MAP6(m, type, arg, ...)					\
+	UK_USR_MAP4(m, __VA_ARGS__), (type)usr->regs.rdx
+#define UK_USR_MAP8(m, type, arg, ...)					\
+	UK_USR_MAP6(m, __VA_ARGS__), (type)usr->regs.r10
+#define UK_USR_MAP10(m, type, arg, ...)					\
+	UK_USR_MAP8(m, __VA_ARGS__), (type)usr->regs.r8
+#define UK_USR_MAP12(m, type, arg, ...)					\
+	UK_USR_MAP10(m, __VA_ARGS__), (type)usr->regs.r9
+#elif (defined __ARM_64__)
+#define UK_USR_MAP2(m, type, arg) (type)usr->regs.x[0]
+#define UK_USR_MAP4(m, type, arg, ...)					\
+	UK_USR_MAP2(m, __VA_ARGS__), (type)usr->regs.x[1]
+#define UK_USR_MAP6(m, type, arg, ...)					\
+	UK_USR_MAP4(m, __VA_ARGS__), (type)usr->regs.x[2]
+#define UK_USR_MAP8(m, type, arg, ...)					\
+	UK_USR_MAP6(m, __VA_ARGS__), (type)usr->regs.x[3]
+#define UK_USR_MAP10(m, type, arg, ...)					\
+	UK_USR_MAP8(m, __VA_ARGS__), (type)usr->regs.x[4]
+#define UK_USR_MAP12(m, type, arg, ...)					\
+	UK_USR_MAP10(m, __VA_ARGS__), (type)usr->regs.x[5]
+#else
+#error "Missing register mappings for selected target architecture"
+#endif
+#define UK_USR_MAPx(nr_args, ...) UK_CONCAT(UK_USR_MAP, nr_args)(__VA_ARGS__)
 
 #define  UK_ARG_MAP0(...)
 #define  UK_ARG_MAP2(m, type, arg) m(type, arg)
@@ -200,14 +211,12 @@ typedef long uk_syscall_arg_t;
 		int _errno = errno;					\
 		long ret;						\
 									\
-		__UK_SYSCALL_RETADDR_ENTRY();				\
 		errno = 0;						\
 		ret = ename(						\
 			UK_ARG_MAPx(x, UK_S_ARG_CAST_LONG, __VA_ARGS__)); \
 		if (ret == -1)						\
 			ret = errno ? -errno : -EFAULT;			\
 		errno = _errno;						\
-		__UK_SYSCALL_RETADDR_CLEAR();				\
 		return ret;						\
 	}								\
 	static inline rtype __##ename(UK_ARG_MAPx(x,			\
@@ -217,10 +226,8 @@ typedef long uk_syscall_arg_t;
 		long ret;						\
 									\
 		__UK_SYSCALL_PRINTD(x, rtype, ename, __VA_ARGS__);	\
-		__UK_SYSCALL_RETADDR_ENTRY();				\
 		ret = (long) __##ename(					\
 			UK_ARG_MAPx(x, UK_S_ARG_CAST_ACTUAL, __VA_ARGS__)); \
-		__UK_SYSCALL_RETADDR_CLEAR();				\
 		return ret;						\
 	}								\
 	static inline rtype __##ename(UK_ARG_MAPx(x,			\
@@ -247,10 +254,8 @@ typedef long uk_syscall_arg_t;
 	{								\
 		rtype ret;						\
 									\
-		__UK_SYSCALL_RETADDR_ENTRY();				\
 		ret = (rtype) ename(					\
 			UK_ARG_MAPx(x, UK_S_ARG_CAST_LONG, __VA_ARGS__)); \
-		__UK_SYSCALL_RETADDR_CLEAR();				\
 		return ret;						\
 	}								\
 	__UK_LLSYSCALL_DEFINE(x, rtype, name, ename, rname, __VA_ARGS__)
@@ -286,10 +291,8 @@ typedef long uk_syscall_arg_t;
 	{								\
 		long ret;						\
 									\
-		__UK_SYSCALL_RETADDR_ENTRY();				\
 		ret = rname(						\
 			UK_ARG_MAPx(x, UK_S_ARG_CAST_LONG, __VA_ARGS__)); \
-		__UK_SYSCALL_RETADDR_CLEAR();				\
 		if (ret < 0 && PTRISERR(ret)) {				\
 			errno = -(int) PTR2ERR(ret);			\
 			return -1;					\
@@ -302,11 +305,10 @@ typedef long uk_syscall_arg_t;
 	{								\
 		long ret;						\
 									\
+		if (strcmp(STRINGIFY(name), "clock_gettime"))		\
 		__UK_SYSCALL_PRINTD(x, rtype, rname, __VA_ARGS__);	\
-		__UK_SYSCALL_RETADDR_ENTRY();				\
 		ret = (long) __##rname(					\
 			UK_ARG_MAPx(x, UK_S_ARG_CAST_ACTUAL, __VA_ARGS__)); \
-		__UK_SYSCALL_RETADDR_CLEAR();				\
 		return ret;						\
 	}								\
 	static inline rtype __##rname(UK_ARG_MAPx(x,			\
@@ -321,6 +323,180 @@ typedef long uk_syscall_arg_t;
 			       __UK_NAME2SCALLR_FN(name),		\
 			       __VA_ARGS__)
 
+#if defined(__X86_64__)
+#define UK_SYSCALL_USR_PROLOGUE_DEFINE(pname, fname, x, ...)		\
+	long __used __naked						\
+	pname(UK_ARG_MAPx(x, UK_S_ARG_LONG, __VA_ARGS__))		\
+	{								\
+		__asm__ __volatile__(					\
+		"cli\n\t"						\
+		"movq   %%rsp, %%gs:(0x28)\n\t"				\
+		"movq	%%gs:(0x20), %%rsp\n\t"				\
+		"andq	$("STRINGIFY(~(UK_SYSCALL_REGS_END_ALIGN - 1))	\
+				"), %%rsp\n\t"				\
+		"subq	$("STRINGIFY(UK_SYSCALL_REGS_SIZE -		\
+				     __REGS_SIZEOF)"), %%rsp\n\t"	\
+		"pushq	$(0x10)\n\t"					\
+		"subq	$8, %%rsp\n\t"					\
+		"pushfq\n\t"						\
+		"pushq	$(0x8)\n\t"					\
+		"subq	$8, %%rsp\n\t"					\
+		"pushq	%%rdi\n\t"					\
+		"movq	%%gs:(0x28), %%rdi\n\t"				\
+		"movq	%%rdi, 32(%%rsp)\n\t"				\
+		"movq	(%%rdi), %%rdi\n\t"				\
+		"movq	%%rdi, 8(%%rsp)\n\t"				\
+		"popq	%%rdi\n\t"					\
+		"pushq	%%rax\n\t"					\
+		"pushq	%%rdi\n\t"					\
+		"pushq	%%rsi\n\t"					\
+		"pushq	%%rdx\n\t"					\
+		"pushq	%%rcx\n\t"					\
+		"pushq	%%rax\n\t"					\
+		"pushq	%%r8\n\t"					\
+		"pushq	%%r9\n\t"					\
+		"pushq	%%r10\n\t"					\
+		"pushq	%%r11\n\t"					\
+		"pushq	%%rbx\n\t"					\
+		"pushq	%%rbp\n\t"					\
+		"pushq	%%r12\n\t"					\
+		"pushq	%%r13\n\t"					\
+		"pushq	%%r14\n\t"					\
+		"pushq	%%r15\n\t"					\
+		"subq	$(8), %%rsp\n\t"				\
+		"movq	%%rsp, %%rdi\n\t"				\
+		"addq	$("STRINGIFY(__REGS_SIZEOF +			\
+				     UKARCH_ULCTX_SIZE)"), %%rdi\n\t"	\
+		"call	ukarch_ectx_store\n\t"				\
+		"movq	%%rsp, %%rdi\n\t"				\
+		"addq	$("STRINGIFY(__REGS_SIZEOF)"), %%rdi\n\t"	\
+		"call	ukarch_ulctx_switchoff\n\t"			\
+		"movq	%%rsp, %%rdi\n\t"				\
+		"sti\n\t"						\
+		"call	"STRINGIFY(fname)"\n\t"				\
+		"movq   %%gs:(0x28), %%rsp\n\t"				\
+		"ret\n\n"						\
+		::							\
+		);							\
+									\
+		return 0;						\
+	}
+#elif defined(__ARM_64__)
+#define UK_SYSCALL_USR_PROLOGUE_DEFINE(pname, fname, x, ...)		\
+	long __used __naked						\
+	pname(UK_ARG_MAPx(x, UK_S_ARG_LONG, __VA_ARGS__))		\
+	{								\
+		__asm__ __volatile__(					\
+		"msr	daifset, #2\n\t"				\
+		"msr	tpidrro_el0, x0\n\t"				\
+		"mrs	x0, tpidr_el1\n\t"				\
+		"str	x0, [x0, #0x20]\n\t"				\
+		"bic	x0, x0, #"					\
+			STRINGIFY(UK_SYSCALL_REGS_END_ALIGN - 1)"\n\t"	\
+		"sub	x0, x0, #"STRINGIFY(UK_SYSCALL_REGS_SIZE)"\n\t"	\
+		"add	sp, sp, x0\n\t"					\
+		"sub	x0, sp, x0\n\t"					\
+		"sub	sp, sp, x0\n\t"					\
+		"str	x0, [sp, #"STRINGIFY(__SP_OFFSET)"]\n\t"	\
+		"mrs	x0, tpidrro_el0\n\t"				\
+		"stp	x0, x1, [sp, #16 * 0]\n\t"			\
+		"stp	x2, x3, [sp, #16 * 1]\n\t"			\
+		"stp	x4, x5, [sp, #16 * 2]\n\t"			\
+		"stp	x6, x7, [sp, #16 * 3]\n\t"			\
+		"stp	x8, x9, [sp, #16 * 4]\n\t"			\
+		"stp	x10, x11, [sp, #16 * 5]\n\t"			\
+		"stp	x12, x13, [sp, #16 * 6]\n\t"			\
+		"stp	x14, x15, [sp, #16 * 7]\n\t"			\
+		"stp	x16, x17, [sp, #16 * 8]\n\t"			\
+		"stp	x18, x19, [sp, #16 * 9]\n\t"			\
+		"stp	x20, x21, [sp, #16 * 10]\n\t"			\
+		"stp	x22, x23, [sp, #16 * 11]\n\t"			\
+		"stp	x24, x25, [sp, #16 * 12]\n\t"			\
+		"stp	x26, x27, [sp, #16 * 13]\n\t"			\
+		"stp	x28, x29, [sp, #16 * 14]\n\t"			\
+		"mrs	x21, elr_el1\n\t"				\
+		"stp	x30, x21, [sp, #16 * 15]\n\t"			\
+		"mrs	x22, spsr_el1\n\t"				\
+		"mrs	x23, esr_el1\n\t"				\
+		"stp	x22, x23, [sp, #16 * 16]\n\t"			\
+		"mov	x0, sp\n\t"					\
+		"add	x0, x0, #("STRINGIFY(__REGS_SIZEOF +		\
+				     UKARCH_ULCTX_SIZE)")\n\t"		\
+		"bl	ukarch_ectx_store\n\t"				\
+		"mov	x0, sp\n\t"					\
+		"add	x0, x0, #"STRINGIFY(__REGS_SIZEOF)"\n\t"	\
+		"bl	ukarch_ulctx_switchoff\n\t"			\
+		"mov	x0, sp\n\t"					\
+		"msr	daifclr, #2\n\t"				\
+		"bl	"STRINGIFY(fname)"\n\t"				\
+		"ldr	x30, [sp, #16 * 15]\n\t"			\
+		"ldp	x28, x29, [sp, #16 * 14]\t\n"			\
+		"ldp	x26, x27, [sp, #16 * 13]\t\n"			\
+		"ldp	x24, x25, [sp, #16 * 12]\t\n"			\
+		"ldp	x22, x23, [sp, #16 * 11]\t\n"			\
+		"ldp	x20, x21, [sp, #16 * 10]\t\n"			\
+		"ldp	x18, x19, [sp, #16 * 9]\t\n"			\
+		"ldr	x9, [sp, #"STRINGIFY(__SP_OFFSET)"]\n\t"	\
+		"mov	sp, x9\n\t"					\
+		"ret\n\t"						\
+		::							\
+		);							\
+									\
+		return 0;						\
+	}
+#else /* !__X86_64__ && !__ARM_64__ */
+#error "Undefined architecture"
+#endif
+
+#define __UK_LLSYSCALL_R_U_DEFINE(x, rtype, name, ename, rname, ...)	\
+	long rname(long _usr);						\
+	long __used ename(long _usr)						\
+	{								\
+		long ret;						\
+									\
+		ret = rname(_usr);					\
+		if (ret < 0 && PTRISERR(ret)) {				\
+			errno = -(int) PTR2ERR(ret);			\
+			return -1;					\
+		}							\
+		return ret;						\
+	}								\
+	static inline rtype __##rname(struct uk_syscall_regs *usr,	\
+				      UK_ARG_MAPx(x, UK_S_ARG_ACTUAL,	\
+						  __VA_ARGS__));	\
+	long __used rname(long _usr)						\
+	{								\
+		struct uk_syscall_regs *usr;				\
+		long ret;						\
+									\
+		usr = (struct uk_syscall_regs *)_usr;			\
+		ret = (long) __##rname(usr,				\
+				       UK_USR_MAPx(x, UK_S_ARG_ACTUAL,	\
+						   __VA_ARGS__));	\
+		return ret;						\
+	}								\
+	static inline rtype __used __##rname(struct uk_syscall_regs *usr\
+				      __maybe_unused,			\
+				      UK_ARG_MAPx(x,			\
+						  UK_S_ARG_ACTUAL_MAYBE_UNUSED,\
+						  __VA_ARGS__))
+#define _UK_LLSYSCALL_R_U_DEFINE(...) __UK_LLSYSCALL_R_U_DEFINE(__VA_ARGS__)
+#define UK_LLSYSCALL_R_U_DEFINE(rtype, name, ...)			\
+	UK_SYSCALL_USR_PROLOGUE_DEFINE(__UK_NAME2SCALLE_FN(name),	\
+				       __UK_NAME2SCALLE_FN(u_##name),	\
+				       UK_NARGS(__VA_ARGS__),		\
+				       __VA_ARGS__)			\
+	UK_SYSCALL_USR_PROLOGUE_DEFINE(__UK_NAME2SCALLR_FN(name),	\
+				       __UK_NAME2SCALLR_FN(u_##name),	\
+				       UK_NARGS(__VA_ARGS__),		\
+				       __VA_ARGS__)			\
+	_UK_LLSYSCALL_R_U_DEFINE(UK_NARGS(__VA_ARGS__),			\
+			     rtype,					\
+			     name,					\
+			     __UK_NAME2SCALLE_FN(u_##name),		\
+			     __UK_NAME2SCALLR_FN(u_##name),		\
+			     __VA_ARGS__)
+
 /*
  * UK_SYSCALL_R_DEFINE()
  * Based on UK_LLSYSCALL_R_DEFINE and provides a libc-style wrapper
@@ -333,10 +509,8 @@ typedef long uk_syscall_arg_t;
 	{								\
 		rtype ret;						\
 									\
-		__UK_SYSCALL_RETADDR_ENTRY();				\
 		ret = (rtype) ename(					\
 			UK_ARG_MAPx(x, UK_S_ARG_CAST_LONG, __VA_ARGS__)); \
-		__UK_SYSCALL_RETADDR_CLEAR();				\
 		return ret;						\
 	}								\
 	__UK_LLSYSCALL_R_DEFINE(x, rtype, name, ename, rname, __VA_ARGS__)
@@ -431,6 +605,7 @@ long uk_syscall6(long nr, long arg1, long arg2, long arg3,
 /* Raw system call, returns negative codes on errors */
 long uk_syscall_r(long nr, ...);
 long uk_vsyscall_r(long nr, va_list arg);
+long uk_syscall6_r_u(struct uk_syscall_regs *usr);
 long uk_syscall6_r(long nr, long arg1, long arg2, long arg3,
 		   long arg4, long arg5, long arg6);
 
@@ -482,18 +657,6 @@ const char *uk_syscall_name(long nr);
  *  - (NULL): if system call is not provided
  */
 const char *uk_syscall_name_p(long nr);
-
-/**
- * Returns the according raw system call handler as function pointer for the
- * given system call number. If the system call handler is not available,
- * NULL is returned.
- * @param nr
- *  System call number of current architecture
- * @return
- *  - Function pointer to raw system call handler
- *  - (NULL): if system call handler is not provided
- */
-long (*uk_syscall_r_fn(long nr))(void);
 
 /*
  * Format flags for system call print functions `uk_snprsyscall()`  and
@@ -564,5 +727,6 @@ int uk_vsnprsyscall(char *buf, __sz maxlen, int fmtf, long syscall_num,
 #ifdef __cplusplus
 }
 #endif
+#endif /* !__ASSEMBLY__ */
 
 #endif /* __UK_SYSCALL_H__ */

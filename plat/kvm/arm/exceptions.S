@@ -26,8 +26,11 @@
  * SUCH DAMAGE.
  *
  */
+#include <uk/plat/common/lcpu.h>
+#include <uk/syscall.h>
 #include <uk/arch/lcpu.h>
 #include <uk/asm.h>
+#include <uk/plat/config.h>
 
 .macro EXCHANGE_SP_WITH_X0
 	add sp, sp, x0	// new_sp = sp + x0
@@ -66,27 +69,33 @@
 	EXCHANGE_SP_WITH_X0
 .endm
 
-.macro ENTER_TRAP, el
-.if \el != 0
-	stp x9, x10, [sp, #-16]
-
-	mrs x9, sp_el0
-	mrs x10, esr_el1
-
-	str sp, [x9, #LCPU_SCRATCH_REG_OFFSET]
-	ldr sp, [x9, #LCPU_AUXSP_OFFSET]
-
-	and x10, x10, 0x00000000fc000000
-	mov x10, x10, lsr #26
-	cmp x10, #0x15
-	addneq sp, sp, #CONFIG_UKPLAT_AUXSP_EL1_TRAP_SP_OFFSET
-
-	ldr x9, [x9, #LCPU_SCRATCH_REG_OFFSET]
-	sub sp, sp, #__TRAP_STACK_SIZE
-	str x9, [sp, #__SP_OFFSET]
-
-	ldp x9, x10, [x9, #-16]
+.macro STORE_REGS, is_irq
+	msr	tpidrro_el0, x0
+	mrs	x0, sp_el0
+	EXCHANGE_SP_WITH_X0
+.if \is_irq != 0
+	add	sp, sp, #STACK_SIZE
 .endif
+	str	x0, [sp, #-16]
+
+	mrs	x0, esr_el1
+	and	x0, x0, #0x00000000fc000000
+	mov	x0, x0, lsr #26
+	cmp	x0, #0x15
+	bne	0f
+
+	mrs	x0, tpidr_el1
+	str	x0, [x0, #LCPU_AUXSP_OFFSET]
+	EXCHANGE_SP_WITH_X0
+	ldr	x0, [x0, #-16]
+	mov	sp, x0
+	bic	x0, x0, #(UK_SYSCALL_REGS_END_ALIGN - 1)
+	sub	x0, x0, #UK_SYSCALL_REGS_SIZE
+	EXCHANGE_SP_WITH_X0
+	str	x0, [sp, #-16]
+0:
+	sub	sp, sp, #__TRAP_STACK_SIZE
+	mrs	x0, tpidrro_el0
 
 	/* Save general purpose registers */
 	stp x0, x1, [sp, #16 * 0]
@@ -113,19 +122,9 @@
 	mrs x22, spsr_el1
 	mrs x23, esr_el1
 	stp x22, x23, [sp, #16 * 16]
-
-.if \el == 0
-	/* Save stack pointer for lower level exception */
-	mrs x18, sp_el0
-	str x18, [sp, #__SP_EL0_OFFSET]
-.endif
-
 .endm
 
-.macro LEAVE_TRAP, el
-	/* Mask IRQ to make sure restore would not be interrupted by IRQ */
-	msr daifset, #2
-
+.macro LOAD_REGS, is_irq
 	/* Restore pstate and exception status register */
 	ldp x22, x23, [sp, #16 * 16]
 	msr spsr_el1, x22
@@ -141,9 +140,7 @@
 	ldp x24, x25, [sp, #16 * 12]
 	ldp x22, x23, [sp, #16 * 11]
 	ldp x20, x21, [sp, #16 * 10]
-.if	\el != 0
-	ldp x18, x19, [x19, #16 * 9]
-.endif
+	/* Skip x18, x19 */
 	ldp x16, x17, [sp, #16 * 8]
 	ldp x14, x15, [sp, #16 * 7]
 	ldp x12, x13, [sp, #16 * 6]
@@ -154,19 +151,13 @@
 	ldp x2, x3, [sp, #16 * 1]
 	ldp x0, x1, [sp, #16 * 0]
 
-.if \el == 0
-	/* Restore stack pointer for exception from EL0 */
-	ldr x18, [sp, #__SP_EL0_OFFSET]
-	msr sp_el0, x18
+	/* Restore stack pointer for exception from EL1 */
+	ldr x18, [sp, #__SP_OFFSET]
+	mov x19, sp
+	mov sp, x18
 
 	/* Restore x18, x19 */
-	ldp x18, x19, [sp, #16 * 9]
-
-	add sp, sp, #__TRAP_STACK_SIZE
-.else
-	ldr sp, [sp, #__SP_OFFSET]
-	ldp x9, x10, [sp, #-16]
-.endif
+	ldp x18, x19, [x19, #16 * 9]
 
 	eret
 .endm
@@ -178,30 +169,30 @@
  */
 .align 6
 el1_sync:
-	ENTER_TRAP 1
+	STORE_REGS 0
 	mov x0, sp
 	mrs x1, far_el1
 	bl trap_el1_sync
-	LEAVE_TRAP 1
+	LOAD_REGS 0
 
 .align 6
 el1_irq:
-	ENTER_TRAP 1
+	STORE_REGS 1
 	msr daifclr, #(8 | 4 | 1)
 	mov x0, sp
 	bl trap_el1_irq
-	LEAVE_TRAP 1
+	LOAD_REGS 1
 
 /* Bad Abort numbers */
 #define BAD_SYNC  0
-#define BAD_IRQ   1
+#define BAD_IRQ   0
 #define BAD_FIQ   2
 #define BAD_ERROR 3
 
 #define el_invalid(name, reason, el)	\
 .align 6;				\
 name##_invalid:				\
-	ENTER_TRAP  el;			\
+	STORE_REGS 0;			\
 	mov x0, sp;			\
 	mov x1, el;			\
 	mov x2, #(reason);		\

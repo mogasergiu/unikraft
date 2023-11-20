@@ -10,6 +10,7 @@
 #include <uk/essentials.h>
 #include <uk/plat/common/cpu.h>
 #include <uk/thread.h>
+#include <uk/syscall.h>
 
 void ukarch_ulctx_switchoff(struct ukarch_ulctx *ulctx)
 {

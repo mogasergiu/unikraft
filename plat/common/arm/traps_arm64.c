@@ -230,7 +230,9 @@ static int arm64_syscall_adapter(void *data)
 {
 	struct ukarch_trap_ctx *ctx = (struct ukarch_trap_ctx *)data;
 
-	ukplat_syscall_handler(ctx->regs);
+	ukplat_lcpu_enable_irq();
+
+	ukplat_syscall_intermediate_handler(ctx->regs);
 	return 1; /* Success */
 }
 

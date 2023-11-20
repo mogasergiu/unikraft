@@ -38,6 +38,7 @@
 #include <uk/arch/types.h>
 #include <uk/alloc.h>
 #include <uk/config.h>
+#include <uk/arch/ctx.h>
 #if CONFIG_LIBUKVMEM
 #include <uk/vmem.h>
 #endif /* CONFIG_LIBUKVMEM */

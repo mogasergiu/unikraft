@@ -345,8 +345,6 @@ void ukplat_entry(int argc, char *argv[])
 	bsp_lcpu->auxsp = ukplat_auxsp_alloc(a,
 #if defined(CONFIG_LIBUKBOOT_HEAP_BASE) && defined(CONFIG_LIBUKVMEM)
 					     &kernel_vas,
-#else /* !CONFIG_LIBUKBOOT_HEAP_BASE && CONFIG_LIBUKVMEM */
-					     NULL,
 #endif /* !CONFIG_LIBUKBOOT_HEAP_BASE && CONFIG_LIBUKVMEM */
 					     0);  /* Default auxsp size */
 #endif /* !CONFIG_LIBUKBOOT_NOSCHED */

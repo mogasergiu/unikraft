@@ -244,6 +244,14 @@ static void _uk_thread_struct_init(struct uk_thread *t,
 	t->priv = priv;
 	t->dtor = dtor;
 	t->exec_time = 0;
+
+	if (!auxsp)
+		auxsp = ukplat_auxsp_alloc(uk_alloc_get_default(),
+#if CONFIG_LIBUKVMEM
+					   uk_vas_get_active(),
+#endif /* CONFIG_LIBUKVMEM */
+					   0);  /* Default auxsp size */
+
 	t->auxsp = auxsp;
 
 	if (tlsp && is_uktls) {
@@ -378,7 +386,7 @@ static int _uk_thread_struct_init_alloc(struct uk_thread *t,
 {
 	void *stack = NULL;
 	void *tls = NULL;
-	uintptr_t auxstack = 0x0;
+	void *auxstack = 0x0;
 	uintptr_t tlsp = 0x0;
 	int rc;
 
@@ -391,8 +399,11 @@ static int _uk_thread_struct_init_alloc(struct uk_thread *t,
 	}
 
 	if (a_auxstack && auxstack_len) {
-		auxstack = ukplat_auxsp_alloc(a_auxstack, uk_vas_get_active(),
-					      auxstack_len);
+		auxstack = (void *)ukplat_auxsp_alloc(a_auxstack,
+#if CONFIG_LIBUKVMEM
+						      uk_vas_get_active(),
+#endif /* CONFIG_LIBUKVMEM */
+						      auxstack_len);
 		if (unlikely(!auxstack)) {
 			rc = -ENOMEM;
 			goto err_free_stack;
@@ -430,7 +441,8 @@ static int _uk_thread_struct_init_alloc(struct uk_thread *t,
 		tlsp = ukarch_tls_tlsp(tls);
 	}
 
-	_uk_thread_struct_init(t, auxsp, tlsp, !(!tlsp), ectx, name, priv,
+	_uk_thread_struct_init(t, (__uptr)auxstack, tlsp, !(!tlsp), ectx,
+			       name, priv,
 			       dtor);
 
 	/* Set uk_thread fields related to stack and TLS */
@@ -520,7 +532,7 @@ int uk_thread_init_fn0(struct uk_thread *t,
 
 	ret = _uk_thread_struct_init_alloc(t,
 					   a_stack, stack_len,
-					   a_auxstack, auxstack_len
+					   a_auxstack, auxstack_len,
 					   a_uktls, custom_ectx, ectx, name,
 					   priv, dtor);
 	if (ret < 0)
@@ -634,7 +646,7 @@ err_out:
 struct uk_thread *uk_thread_create_bare(struct uk_alloc *a,
 					uintptr_t ip,
 					uintptr_t sp,
-					uintptr_t auxsp
+					uintptr_t auxsp,
 					uintptr_t tlsp,
 					bool is_uktls,
 					bool no_ectx,

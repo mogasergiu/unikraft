@@ -60,6 +60,9 @@ extern "C" {
 #ifndef __packed
 #define __packed               __attribute__((packed))
 #endif
+#ifndef __naked
+#define __naked                __attribute__((naked))
+#endif
 #ifndef __noreturn
 #define __noreturn             __attribute__((noreturn))
 #endif

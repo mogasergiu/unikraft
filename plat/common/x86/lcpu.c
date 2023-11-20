@@ -76,6 +76,9 @@ int lcpu_arch_init(struct lcpu *this_lcpu)
 
 	traps_lcpu_init(this_lcpu);
 
+	wrmsrl(X86_MSR_GS_BASE, (__u64)this_lcpu);
+	wrmsrl(X86_MSR_KERNEL_GS_BASE, this_lcpu);
+
 	return 0;
 }
 

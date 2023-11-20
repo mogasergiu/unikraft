@@ -160,4 +160,3 @@ restore_point:
 	ldr x18, [sp], #16
 
 	ret
-

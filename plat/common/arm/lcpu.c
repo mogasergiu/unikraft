@@ -39,8 +39,7 @@
 #include <arm/arm64/cpu.h>
 #include <uk/intctlr/gic.h>
 #include <libfdt.h>
-
-#define CPU_ID_MASK 0xff00ffffffUL
+#include <uk/plat/config.h>
 
 __lcpuid lcpu_arch_id(void)
 {
@@ -49,7 +48,7 @@ __lcpuid lcpu_arch_id(void)
 	mpidr_reg = SYSREG_READ64(mpidr_el1);
 
 	/* return the affinity bits for the current core */
-	return mpidr_reg & CPU_ID_MASK;
+	return mpidr_reg & LCPU_ID_MASK;
 }
 
 void __noreturn lcpu_arch_jump_to(void *sp, ukplat_lcpu_entry_t entry)
@@ -79,8 +78,13 @@ void lcpu_start(struct lcpu *cpu);
 static __paddr_t lcpu_start_paddr;
 extern struct _gic_dev *gic;
 
+static __align(UKARCH_SP_ALIGN) __u8
+lcpu_irq_and_trap_stack[CONFIG_UKPLAT_LCPU_MAXCOUNT][STACK_SIZE * 2];
+
 int lcpu_arch_init(struct lcpu *this_lcpu)
 {
+	__u32 idx = this_lcpu->idx;
+	__uptr irqsp __unused, trapsp;
 	int ret = 0;
 
 	/* Initialize the interrupt controller for non-bsp cores */
@@ -89,6 +93,14 @@ int lcpu_arch_init(struct lcpu *this_lcpu)
 		if (unlikely(ret))
 			return ret;
 	}
+
+	SYSREG_WRITE64(tpidr_el1, this_lcpu);
+
+	trapsp = (__uptr)&lcpu_irq_and_trap_stack[idx]
+			 [sizeof(lcpu_irq_and_trap_stack[idx]) / 2];
+	irqsp = (__uptr)&lcpu_irq_and_trap_stack[idx]
+			[sizeof(lcpu_irq_and_trap_stack[idx])];
+	SYSREG_WRITE64(sp_el0, trapsp);
 
 	return ret;
 }
@@ -122,7 +134,7 @@ static int do_arch_mp_init(void *arg __unused)
 		     !(m.gicc->flags & ACPI_MADT_GICC_FLAGS_ON_CAP)))
 			continue;
 
-		cpu_id = m.gicc->mpidr & CPU_ID_MASK;
+		cpu_id = m.gicc->mpidr & LCPU_ID_MASK;
 
 		if (bsp_cpu_id == cpu_id) {
 			UK_ASSERT(!bsp_found);
