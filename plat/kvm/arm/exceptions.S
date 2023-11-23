@@ -26,6 +26,7 @@
  * SUCH DAMAGE.
  *
  */
+#include <uk/syscall.h>
 #include <uk/arch/lcpu.h>
 #include <uk/asm.h>
 #include <uk/plat/common/lcpu.h>
@@ -99,7 +100,6 @@
 	/* If we are an IRQ, use the IRQ stack instead. */
 	add     sp, sp, #STACK_SIZE
 .endif
-
 	/* Store old SP previously saved into x0 */
 	str     x0, [sp, #-16]
 

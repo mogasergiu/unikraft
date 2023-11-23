@@ -201,7 +201,6 @@ int uk_sched_start(struct uk_sched *s)
 {
 	struct uk_thread *main_thread;
 	uintptr_t tlsp;
-	__uptr auxsp;
 	int ret;
 
 	UK_ASSERT(s);

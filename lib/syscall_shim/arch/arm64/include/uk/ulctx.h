@@ -2,7 +2,7 @@
 #error Do not include this header directly
 #endif
 
-#define UKARCH_ULCTX_SIZE			8
+#define UKARCH_ULCTX_SIZE			16
 
 #if !__ASSEMBLY__
 

@@ -66,7 +66,7 @@ struct lcpu_arch { };
        (IN_RANGE((__uptr)(ptr),                                        \
                  (__uptr)lcpu_get(0),                                  \
                  (__uptr)CONFIG_UKPLAT_LCPU_MAXCOUNT *                 \
-                 sizeof(struct lcpu))) \
+                 sizeof(struct lcpu)))
 
 /*
  * LCPU Startup Arguments

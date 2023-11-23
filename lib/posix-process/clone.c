@@ -307,50 +307,101 @@ static void _clone_child_gc(struct uk_thread *t)
 	}
 }
 
-#if CONFIG_ARCH_X86_64
-static void clone_setup_arch_ulctx(struct ukarch_ulctx *u, __uptr ip, __uptr sp)
+void _ctx_x86_call0(void);
+void uk_syscall_regs_popall(void);
+
+#if defined(__X86_64__)
+static void clone_setup_child_ctx(struct uk_syscall_regs *pusr,
+				  struct uk_thread *child, __uptr sp)
 {
+	__uptr auxsp_pos = child->auxsp;
+	struct uk_syscall_regs *cusr;
+
+	/* Create a child context whose stack pointer is that of the auxiliary
+	 * stack, minus the parent's `struct uk_syscall_regs` saved on the
+	 * auxiliary stack that we will have to first patch now and then pop off
+	 */
+
+	/* Make room for child's copy of `struct uk_syscall_regs` */
+	auxsp_pos = ALIGN_DOWN(auxsp_pos, UK_SYSCALL_REGS_END_ALIGN);
+	auxsp_pos -= UK_SYSCALL_REGS_SIZE;
+	memcpy((void *)auxsp_pos, (void *)pusr, UK_SYSCALL_REGS_SIZE);
+
+	/* Now patch the child's return registers */
+	cusr = (struct uk_syscall_regs *)auxsp_pos;
+
 	/* Child must see %rax as 0 */
-	u->r->rax = 0x0;
+	cusr->regs.rax = 0x0;
 
 	/* Make sure we have interrupts enabled, as this is supposedly a normal
 	 * userspace thread - the other flags don't really matter since the
 	 * first thing the child does is compare %rax to 0x0.
 	 */
-	u->r->eflags |= X86_EFLAGS_IF;
-
-	/* We are a newly cloned thread and, technically, we are in syscall
-	 * context and not online yet.
-	 */
-	u->flags = UKARCH_ULCTX_FLAGS_NEWCLONE | UKARCH_ULCTX_FLAGS_INSYSCALL;
-
-	/* Use parent's userland gs */
-	u->gs_base = uk_thread_current()->ulctx.gs_base;
+	cusr->regs.eflags |= X86_EFLAGS_IF;
 
 	/* Finally, make sure we do return to what the child is expected to
 	 * have as an instruction pointer as well as a stack pointer.
 	 */
-	u->r->rip = ip;
-	u->r->rsp = sp;
+	cusr->regs.rip = pusr->regs.rip;
+	cusr->regs.rsp = sp;
+
+	/* Use parent's userland gs_base */
+	cusr->ulctx.gs_base = pusr->ulctx.gs_base;
+
+	/* Use parent's fs_base if clone did not have SETTLS */
+	if (!child->tlsp)
+		cusr->ulctx.fs_base = pusr->ulctx.fs_base;
+	else
+		cusr->ulctx.fs_base = child->tlsp;
+
+	ukarch_ctx_init(&child->ctx,
+			auxsp_pos,
+			0,
+			(__uptr)&uk_syscall_regs_popall);
 }
-#else	/* !CONFIG_ARCH_X86_64 */
-static void clone_setup_arch_ulctx(struct ukarch_ulctx *u, __uptr ip, __uptr sp)
+#elif defined(__ARM_64__)
+static void clone_setup_child_ctx(struct uk_syscall_regs *pusr,
+				  struct uk_thread *child, __uptr sp)
 {
+	__uptr auxsp_pos = child->auxsp;
+	struct uk_syscall_regs *cusr;
+
+	/* Create a child context whose stack pointer is that of the auxiliary
+	 * stack, minus the parent's `struct uk_syscall_regs` saved on the
+	 * auxiliary stack that we will have to first patch now and then pop off
+	 */
+
+	/* Make room for child's `struct uk_syscall_regs` and copy them */
+	auxsp_pos = ALIGN_DOWN(auxsp_pos, UK_SYSCALL_REGS_END_ALIGN);
+	auxsp_pos -= UK_SYSCALL_REGS_SIZE;
+	memcpy((void *)auxsp_pos, (void *)pusr, UK_SYSCALL_REGS_SIZE);
+
+	/* Now patch the child's return registers */
+	cusr = (struct uk_syscall_regs *)auxsp_pos;
+
 	/* Child must see x0 as 0 */
-	u->r->x[0] = 0x0;
+	cusr->regs.x[0] = 0x0;
 
-	/* We are a newly cloned thread and, technically, we are in syscall
-	 * context and not online yet.
+	/* Make sure we do return to what the child is expected to
+	 * have as an instruction pointer as well as a stack pointer.
 	 */
-	u->flags = UKARCH_ULCTX_FLAGS_NEWCLONE | UKARCH_ULCTX_FLAGS_INSYSCALL;
+	cusr->regs.elr_el1 = pusr->regs.lr;
+	cusr->regs.sp = sp;
 
-	/* Finally, make sure we do return to what the child is expected to
-	 * have as an instruction pointeer as well as a stack pointer.
-	 */
-	u->r->elr_el1 = ip;
-	u->r->sp = sp;
+	/* Use parent's user land TPIDR_EL0 if clone did not have SETTLS */
+	if (!child->tlsp)
+		cusr->ulctx.tpidr_el0 = pusr->ulctx.tpidr_el0;
+	else
+		cusr->ulctx.tpidr_el0 = child->tlsp;
+
+	ukarch_ctx_init(&child->ctx,
+			auxsp_pos,
+			0,
+			(__uptr)&uk_syscall_regs_popall);
 }
-#endif /* !CONFIG_ARCH_X86_64 */
+#else /* !__X86_64__ && !__ARM_64__ */
+#error "Undefined architecture"
+#endif /* !__X86_64__ && !__ARM_64__ */
 
 /*
  * NOTE: The clone system call and the handling of the TLS
@@ -367,10 +418,9 @@ static void clone_setup_arch_ulctx(struct ukarch_ulctx *u, __uptr ip, __uptr sp)
  *       to zero.
  */
 static int _clone(struct clone_args *cl_args, size_t cl_args_len,
-		  __uptr return_addr)
+		  struct uk_syscall_regs *usr)
 {
 	struct uk_thread *child = NULL;
-	struct __regs child_regs;
 	struct uk_thread *t;
 	struct uk_sched *s;
 	__u64 flags;
@@ -384,7 +434,6 @@ static int _clone(struct clone_args *cl_args, size_t cl_args_len,
 	/* Parent must have ECTX and a Unikraft TLS */
 	UK_ASSERT((t->flags & UK_THREADF_ECTX)
 		  && (t->flags & UK_THREADF_UKTLS));
-	UK_ASSERT(return_addr);
 
 	if (!cl_args || cl_args_len < CL_ARGS_REQUIRED_LEN) {
 		uk_pr_debug("No or invalid clone arguments given\n");
@@ -431,13 +480,14 @@ static int _clone(struct clone_args *cl_args, size_t cl_args_len,
 		uk_pr_debug(" child_tid: %p\n", (void *) cl_args->child_tid);
 	uk_pr_debug(" stack: %p\n", (void *) cl_args->stack);
 	uk_pr_debug(" tls: %p\n", (void *) cl_args->tls);
-	uk_pr_debug(" <return>: %p\n", (void *) return_addr);
+	uk_pr_debug(" <return>: %p\n", (void *) usr->rip);
 	uk_pr_debug(")\n");
 #endif /* UK_DEBUG */
 
+
 	if ((flags & CLONE_SETTLS)
 #if CONFIG_LIBSYSCALL_SHIM_HANDLER_ULTLS
-	    && (ukarch_ulctx_get_tlsp(&t->ulctx) == 0x0)
+	    && (ukarch_ulctx_get_tlsp(&usr->ulctx) == 0x0)
 #endif /* CONFIG_LIBSYSCALL_SHIM_HANDLER_ULTLS */
 	) {
 		/* The caller already created a TLS for the child (for instance
@@ -448,6 +498,7 @@ static int _clone(struct clone_args *cl_args, size_t cl_args_len,
 			    (void *) cl_args->tls);
 		child = uk_thread_create_container2(s->a,
 						    (__uptr) cl_args->stack,
+						    0,
 						    (__uptr) cl_args->tls,
 						    true, /* TLS is an UKTLS */
 						    false, /* We want ECTX */
@@ -462,7 +513,7 @@ static int _clone(struct clone_args *cl_args, size_t cl_args_len,
 		 * places TLS variables and uses them effectively as TCB.
 		 */
 #if CONFIG_LIBSYSCALL_SHIM_HANDLER_ULTLS
-		if (ukarch_ulctx_get_tlsp(&t->ulctx) != 0x0) {
+		if (ukarch_ulctx_get_tlsp(&usr->ulctx) != 0x0) {
 			uk_pr_debug("Allocating an Unikraft TLS for the new child, parent called from context with custom TLS\n");
 		} else
 #endif /* CONFIG_LIBSYSCALL_SHIM_HANDLER_ULTLS */
@@ -471,6 +522,7 @@ static int _clone(struct clone_args *cl_args, size_t cl_args_len,
 		}
 		child = uk_thread_create_container(s->a,
 						   NULL, 0, /* Stack is given */
+						   NULL, 0,
 						   s->a_uktls,
 						   false, /* We want ECTX */
 						   (t->name) ? strdup(t->name)
@@ -510,41 +562,8 @@ static int _clone(struct clone_args *cl_args, size_t cl_args_len,
 		    t, t->name ? child->name : "<unnamed>",
 		    child, child->name ? child->name : "<unnamed>", ret);
 
-#if CONFIG_LIBSYSCALL_SHIM_HANDLER
-	/* Copy parent registers into child registers */
-	memcpy(&child_regs, t->ulctx.r, sizeof(child_regs));
+	clone_setup_child_ctx(usr, child, (__uptr)cl_args->stack);
 
-	/* Temporarily assign locally defined `struct __regs` to use for
-	 * setting up ulctx and then remove reference so that child does not,
-	 * somehow, unexpectedly, try to access this current stack frame.
-	 */
-	child->ulctx.r = &child_regs;
-	ukarch_ulctx_set_tlsp(&child->ulctx, child->tlsp);
-
-	clone_setup_arch_ulctx(&child->ulctx,
-			       return_addr, (__uptr)cl_args->stack);
-	child->ulctx.r = NULL;
-
-	/*
-	 * Child starts at return address, sets given stack and given TLS.
-	 * Register clearing has the effect that it looks like `clone`
-	 * returns `0` in the child.
-	 */
-	ukarch_ctx_init(&child->ctx,
-			(__uptr)cl_args->stack,
-			&child_regs,
-			return_addr);
-#else /* !CONFIG_LIBSYSCALL_SHIM_HANDLER */
-	/*
-	 * Child starts at return address, sets given stack and given TLS.
-	 * Register clearing has the effect that it looks like `clone`
-	 * returns `0` in the child.
-	 */
-	ukarch_ctx_init(&child->ctx,
-			(__uptr) cl_args->stack,
-			false,
-			return_addr);
-#endif
 	uk_thread_set_runnable(child);
 
 	/* We will return the child's thread ID in the parent */
@@ -562,14 +581,14 @@ err_out:
 }
 
 #if CONFIG_ARCH_X86_64
-UK_LLSYSCALL_R_DEFINE(int, clone,
+UK_LLSYSCALL_R_U_DEFINE(int, clone,
 		      unsigned long, flags,
 		      void *, sp,
 		      int *, parent_tid,
 		      int *, child_tid,
 		      unsigned long, tlsp)
 #else /* !CONFIG_ARCH_X86_64 */
-UK_LLSYSCALL_R_DEFINE(int, clone,
+UK_LLSYSCALL_R_U_DEFINE(int, clone,
 		      unsigned long, flags,
 		      void *, sp,
 		      int *, parent_tid,
@@ -588,7 +607,7 @@ UK_LLSYSCALL_R_DEFINE(int, clone,
 		.tls         = (__u64) tlsp
 	};
 
-	return _clone(&cl_args, sizeof(cl_args), uk_syscall_return_addr());
+	return _clone(&cl_args, sizeof(cl_args), usr);
 }
 
 #if UK_LIBC_SYSCALLS

@@ -55,7 +55,7 @@ extern "C" {
  * @param r Referenced to saved registers. After the call, the
  *          the struct will be restored for the caller as state.
  */
-void ukplat_syscall_handler(struct __regs *r);
+void ukplat_syscall_handler(struct uk_syscall_regs *regs);
 #endif /* CONFIG_HAVE_SYSCALL */
 
 #ifdef __cplusplus

@@ -17,7 +17,6 @@ void ukarch_ulctx_switchoff(struct ukarch_ulctx *ulctx)
 {
 	UK_ASSERT(ulctx);
 	UK_ASSERT(lcpu_get_current());
-	UK_ASSERT(!IS_LCPU_PTR(rdmsrl(X86_MSR_KERNEL_GS_BASE)));
 
 	/* This can only be called from Unikraft ctx in bincompat mode.
 	 * Therefore, X86_MSR_GS_BASE holds the current `struct lcpu` and
@@ -34,7 +33,6 @@ void ukarch_ulctx_switchon(struct ukarch_ulctx *ulctx)
 {
 	UK_ASSERT(ulctx);
 	UK_ASSERT(lcpu_get_current());
-	UK_ASSERT(IS_LCPU_PTR(rdmsrl(X86_MSR_KERNEL_GS_BASE)));
 
 #if CONFIG_LIBSYSCALL_SHIM_HANDLER_ULTLS
 	ukarch_ulctx_switchon_tls(ulctx);
