@@ -95,6 +95,20 @@ int lcpu_arch_init(struct lcpu *this_lcpu)
 	return ret;
 }
 
+__lcpuid ukplat_lcpu_id(void)
+{
+       return lcpu_arch_id();
+}
+
+struct lcpu *lcpu_get_current(void)
+{
+       struct lcpu *this_lcpu = SYSREG_READ64(tpidr_el1);
+
+       UK_ASSERT(IS_LCPU_PTR(this_lcpu));
+
+       return this_lcpu;
+}
+
 #ifdef CONFIG_UKPLAT_ACPI
 static int do_arch_mp_init(void *arg __unused)
 {

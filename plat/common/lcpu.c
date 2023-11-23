@@ -113,11 +113,6 @@ struct lcpu *lcpu_get(__lcpuidx idx)
 	return &lcpus[idx];
 }
 
-struct lcpu *lcpu_get_current(void)
-{
-	return lcpu_get(ukplat_lcpu_idx());
-}
-
 int lcpu_init(struct lcpu *this_lcpu)
 {
 	int rc;
@@ -189,11 +184,6 @@ void ukplat_lcpu_halt_irq_until(__nsec until)
 	UK_ASSERT(ukplat_lcpu_irqs_disabled());
 
 	time_block_until(until);
-}
-
-__lcpuid ukplat_lcpu_id(void)
-{
-	return lcpu_arch_id();
 }
 
 #ifdef CONFIG_HAVE_SMP

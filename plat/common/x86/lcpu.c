@@ -111,6 +111,20 @@ void __noreturn lcpu_arch_jump_to(void *sp, ukplat_lcpu_entry_t entry)
 	__builtin_unreachable();
 }
 
+__lcpuid ukplat_lcpu_id(void)
+{
+       UK_ASSERT(IS_LCPU_PTR(rdgsbase()));
+
+       return rdgsbase64(LCPU_ID_OFFSET);
+}
+
+struct lcpu *lcpu_get_current(void)
+{
+       UK_ASSERT(IS_LCPU_PTR(rdgsbase()));
+
+       return lcpu_get(ukplat_lcpu_idx());
+}
+
 #if CONFIG_HAVE_SMP
 IMPORT_START16_SYM(gdt32_ptr, 2, MOV);
 IMPORT_START16_SYM(gdt32, 4, DATA);

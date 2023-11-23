@@ -62,6 +62,12 @@ struct lcpu_arch { };
 #endif /* !__ASSEMBLY__ */
 #endif /* !LCPU_ARCH_SIZE */
 
+#define IS_LCPU_PTR(ptr)                                               \
+       (IN_RANGE((__uptr)(ptr),                                        \
+                 (__uptr)lcpu_get(0),                                  \
+                 (__uptr)CONFIG_UKPLAT_LCPU_MAXCOUNT *                 \
+                 sizeof(struct lcpu))) \
+
 /*
  * LCPU Startup Arguments
  */
