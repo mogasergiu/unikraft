@@ -35,4 +35,8 @@ void ukarch_ulctx_switchoff(struct ukarch_ulctx *ulctx);
 
 void ukarch_ulctx_switchon(struct ukarch_ulctx *ulctx);
 
+__uptr ukarch_ulctx_get_gs_base(struct ukarch_ulctx *ulctx);
+
+void ukarch_ulctx_set_gs_base(struct ukarch_ulctx *ulctx, __uptr gs_base);
+
 #endif /* !__ASSEMBLY__ */
