@@ -105,6 +105,9 @@ extern "C" {
 #ifndef __fallthrough
 #define __fallthrough          __attribute__((fallthrough))
 #endif
+#ifndef __naked
+#define __naked                __attribute__((naked))
+#endif
 
 #ifndef __alias
 #define __alias(old, new) \
