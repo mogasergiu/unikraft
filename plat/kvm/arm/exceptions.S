@@ -69,6 +69,9 @@
 .endm
 
 .macro SAVE_REGS, is_irq
+	/* Mask IRQ to make sure restore would not be interrupted by IRQ */
+	msr daifset, #2
+
 	/* Use TPIDRRO_EL0 as scratch register. It is fine to do so because
 	 * it will always hold a value the application can't modify and we will
 	 * always be able to restore it to its desired known value anytime we
