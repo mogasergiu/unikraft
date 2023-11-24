@@ -400,6 +400,73 @@ typedef long uk_syscall_arg_t;
 			       __UK_NAME2SCALLR_FN(name),		\
 			       __VA_ARGS__)
 
+#if defined(__X86_64__)
+#define UK_SYSCALL_USR_PROLOGUE_DEFINE(pname, fname, x, ...)		\
+	long __used __naked						\
+	pname(UK_ARG_MAPx(x, UK_S_ARG_LONG_MAYBE_UNUSED, __VA_ARGS__))	\
+	{								\
+		__asm__ __volatile__(					\
+		"cli\n\t"						\
+		"movq   %%rsp, %%gs:(0x28)\n\t"				\
+		"movq	%%gs:(0x20), %%rsp\n\t"				\
+		"andq	$("STRINGIFY(~(UK_SYSCALL_REGS_END_ALIGN - 1))	\
+				"), %%rsp\n\t"				\
+		"subq	$("STRINGIFY(UK_SYSCALL_REGS_SIZE -		\
+				     __REGS_SIZEOF)"), %%rsp\n\t"	\
+		"pushq	$(0x10)\n\t"					\
+		"subq	$8, %%rsp\n\t"					\
+		"pushfq\n\t"						\
+		"pushq	$(0x8)\n\t"					\
+		"subq	$8, %%rsp\n\t"					\
+		"pushq	%%rdi\n\t"					\
+		"movq	%%gs:(0x28), %%rdi\n\t"				\
+		"movq	%%rdi, 32(%%rsp)\n\t"				\
+		"movq	(%%rdi), %%rdi\n\t"				\
+		"movq	%%rdi, 8(%%rsp)\n\t"				\
+		"popq	%%rdi\n\t"					\
+		"pushq	%%rax\n\t"					\
+		"pushq	%%rdi\n\t"					\
+		"pushq	%%rsi\n\t"					\
+		"pushq	%%rdx\n\t"					\
+		"pushq	%%rcx\n\t"					\
+		"pushq	%%rax\n\t"					\
+		"pushq	%%r8\n\t"					\
+		"pushq	%%r9\n\t"					\
+		"pushq	%%r10\n\t"					\
+		"pushq	%%r11\n\t"					\
+		"pushq	%%rbx\n\t"					\
+		"pushq	%%rbp\n\t"					\
+		"pushq	%%r12\n\t"					\
+		"pushq	%%r13\n\t"					\
+		"pushq	%%r14\n\t"					\
+		"pushq	%%r15\n\t"					\
+		"subq	$(8), %%rsp\n\t"				\
+		"movq	%%rsp, %%rdi\n\t"				\
+		"addq	$("STRINGIFY(__REGS_SIZEOF +			\
+				     UKARCH_ULCTX_SIZE)"), %%rdi\n\t"	\
+		"call	ukarch_ectx_store\n\t"				\
+		"movq	%%rsp, %%rdi\n\t"				\
+		"addq	$("STRINGIFY(__REGS_SIZEOF)"), %%rdi\n\t"	\
+		"call	ukarch_ulctx_switchoff\n\t"			\
+		"movq	%%rsp, %%rdi\n\t"				\
+		"sti\n\t"						\
+		"call	"STRINGIFY(fname)"\n\t"				\
+		"addq	$(8), %%rsp\n\t"				\
+		"popq	%%r15\n\t"					\
+		"popq	%%r14\n\t"					\
+		"popq	%%r13\n\t"					\
+		"popq	%%r12\n\t"					\
+		"popq	%%rbp\n\t"					\
+		"popq	%%rbx\n\t"					\
+		"movq   %%gs:(0x28), %%rsp\n\t"				\
+		"ret\n\n"						\
+		::							\
+		);							\
+									\
+		return 0;						\
+	}
+#endif
+
 /*
  * UK_SYSCALL_R_DEFINE()
  * Based on UK_LLSYSCALL_R_DEFINE and provides a libc-style wrapper
