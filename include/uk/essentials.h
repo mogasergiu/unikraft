@@ -357,6 +357,10 @@ extern "C" {
 #define UK_NARGS(...) \
 	__UK_NARGS_X(, ##__VA_ARGS__, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, \
 		     15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0)
+#define UK_NACTUAL_ARGS(...) \
+	__UK_NARGS_X(, ##__VA_ARGS__, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, \
+		     7, 7, 7, 6, 7, 5, 7, 4, 7, 3, 7, 2, 1, 7, 0, 7)
+
 #endif /* UK_NARGS */
 
 #ifdef __cplusplus
