@@ -327,8 +327,15 @@ typedef long uk_syscall_arg_t;
 		   "(" STRINGIFY(rtype) ") " STRINGIFY(fname)		\
 		   "(" UK_ARG_FMT_MAPx(x, UK_S_ARG_FMT_LONGX, __VA_ARGS__) ")\n" \
 		   UK_ARG_EMAPx(x, UK_S_ARG_CAST_LONG, __VA_ARGS__) )
+
+#define __UK_SYSCALL_USR_PRINTD(x, xa, rtype, fname, ...)			\
+	_uk_printd(uk_libid_self(), __STR_BASENAME__, __LINE__,		\
+		   "(" STRINGIFY(rtype) ") " STRINGIFY(fname)		\
+		   "(" UK_ARG_FMT_MAPx(x, UK_S_ARG_FMT_LONGX, __VA_ARGS__) ")\n", \
+		   UK_USR_MAPx(x, xa, UK_S_ARG_CAST_LONG, __VA_ARGS__) )
 #else
 #define __UK_SYSCALL_PRINTD(...) do {} while(0)
+#define __UK_SYSCALL_USR_PRINTD(...) do {} while(0)
 #endif /* CONFIG_LIBSYSCALL_SHIM_DEBUG || CONFIG_LIBUKDEBUG_PRINTD */
 
 /* System call implementation that uses errno and returns -1 on errors */
