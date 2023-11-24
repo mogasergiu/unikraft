@@ -465,6 +465,71 @@ typedef long uk_syscall_arg_t;
 									\
 		return 0;						\
 	}
+#elif defined(__ARM_64__)
+#define UK_SYSCALL_USR_PROLOGUE_DEFINE(pname, fname, x, ...)		\
+	long __used __naked						\
+	pname(UK_ARG_MAPx(x, UK_S_ARG_LONG_MAYBE_UNUSED, __VA_ARGS__))	\
+	{								\
+		__asm__ __volatile__(					\
+		"msr	daifset, #2\n\t"				\
+		"msr	tpidrro_el0, x0\n\t"				\
+		"mrs	x0, tpidr_el1\n\t"				\
+		"str	x0, [x0, #0x20]\n\t"				\
+		"bic	x0, x0, #"					\
+			STRINGIFY(UK_SYSCALL_REGS_END_ALIGN - 1)"\n\t"	\
+		"sub	x0, x0, #"STRINGIFY(UK_SYSCALL_REGS_SIZE)"\n\t"	\
+		"add	sp, sp, x0\n\t"					\
+		"sub	x0, sp, x0\n\t"					\
+		"sub	sp, sp, x0\n\t"					\
+		"str	x0, [sp, #"STRINGIFY(__SP_OFFSET)"]\n\t"	\
+		"mrs	x0, tpidrro_el0\n\t"				\
+		"stp	x0, x1, [sp, #16 * 0]\n\t"			\
+		"stp	x2, x3, [sp, #16 * 1]\n\t"			\
+		"stp	x4, x5, [sp, #16 * 2]\n\t"			\
+		"stp	x6, x7, [sp, #16 * 3]\n\t"			\
+		"stp	x8, x9, [sp, #16 * 4]\n\t"			\
+		"stp	x10, x11, [sp, #16 * 5]\n\t"			\
+		"stp	x12, x13, [sp, #16 * 6]\n\t"			\
+		"stp	x14, x15, [sp, #16 * 7]\n\t"			\
+		"stp	x16, x17, [sp, #16 * 8]\n\t"			\
+		"stp	x18, x19, [sp, #16 * 9]\n\t"			\
+		"stp	x20, x21, [sp, #16 * 10]\n\t"			\
+		"stp	x22, x23, [sp, #16 * 11]\n\t"			\
+		"stp	x24, x25, [sp, #16 * 12]\n\t"			\
+		"stp	x26, x27, [sp, #16 * 13]\n\t"			\
+		"stp	x28, x29, [sp, #16 * 14]\n\t"			\
+		"mrs	x21, elr_el1\n\t"				\
+		"stp	x30, x21, [sp, #16 * 15]\n\t"			\
+		"mrs	x22, spsr_el1\n\t"				\
+		"mrs	x23, esr_el1\n\t"				\
+		"stp	x22, x23, [sp, #16 * 16]\n\t"			\
+		"mov	x0, sp\n\t"					\
+		"add	x0, x0, #("STRINGIFY(__REGS_SIZEOF +		\
+				     UKARCH_ULCTX_SIZE)")\n\t"		\
+		"bl	ukarch_ectx_store\n\t"				\
+		"mov	x0, sp\n\t"					\
+		"add	x0, x0, #"STRINGIFY(__REGS_SIZEOF)"\n\t"	\
+		"bl	ukarch_ulctx_switchoff\n\t"			\
+		"mov	x0, sp\n\t"					\
+		"msr	daifclr, #2\n\t"				\
+		"bl	"STRINGIFY(fname)"\n\t"				\
+		"ldr	x30, [sp, #16 * 15]\n\t"			\
+		"ldp	x28, x29, [sp, #16 * 14]\t\n"			\
+		"ldp	x26, x27, [sp, #16 * 13]\t\n"			\
+		"ldp	x24, x25, [sp, #16 * 12]\t\n"			\
+		"ldp	x22, x23, [sp, #16 * 11]\t\n"			\
+		"ldp	x20, x21, [sp, #16 * 10]\t\n"			\
+		"ldp	x18, x19, [sp, #16 * 9]\t\n"			\
+		"ldr	x9, [sp, #"STRINGIFY(__SP_OFFSET)"]\n\t"	\
+		"mov	sp, x9\n\t"					\
+		"ret\n\t"						\
+		::							\
+		);							\
+									\
+		return 0;						\
+	}
+#else /* !__X86_64__ && !__ARM_64__ */
+#error "Undefined architecture"
 #endif
 
 /*
