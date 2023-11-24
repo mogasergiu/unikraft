@@ -606,6 +606,59 @@ typedef long uk_syscall_arg_t;
 #error "Undefined architecture"
 #endif
 
+#define __UK_LLSYSCALL_R_U_DEFINE(x, xa, rtype, name, ename, rname, ...)\
+	long rname(long _usr);						\
+	long __used ename(long _usr)						\
+	{								\
+		long ret;						\
+									\
+		ret = rname(_usr);					\
+		if (ret < 0 && PTRISERR(ret)) {				\
+			errno = -(int) PTR2ERR(ret);			\
+			return -1;					\
+		}							\
+		return ret;						\
+	}								\
+	static inline rtype __##rname(struct uk_syscall_regs *usr,	\
+				      UK_ARG_MAPx(x, UK_S_ARG_ACTUAL,	\
+						  __VA_ARGS__));	\
+	long __used rname(long _usr)						\
+	{								\
+		struct uk_syscall_regs *usr;				\
+		long ret;						\
+									\
+		usr = (struct uk_syscall_regs *)_usr;			\
+		__UK_SYSCALL_USR_PRINTD(x, xa, rtype, rname,		\
+					__VA_ARGS__);			\
+		ret = (long) __##rname(usr,				\
+				       UK_USR_MAPx(x, xa,		\
+						   UK_S_ARG_ACTUAL,	\
+						   __VA_ARGS__));	\
+		return ret;						\
+	}								\
+	static inline rtype __used __##rname(struct uk_syscall_regs *usr\
+				      __maybe_unused,			\
+				      UK_ARG_MAPx(x,			\
+						  UK_S_ARG_ACTUAL_MAYBE_UNUSED,\
+						  __VA_ARGS__))
+#define _UK_LLSYSCALL_R_U_DEFINE(...) __UK_LLSYSCALL_R_U_DEFINE(__VA_ARGS__)
+#define UK_LLSYSCALL_R_U_DEFINE(rtype, name, ...)			\
+	UK_SYSCALL_USR_PROLOGUE_DEFINE(__UK_NAME2SCALLE_FN(name),	\
+				       __UK_NAME2SCALLE_FN(u_##name),	\
+				       UK_NARGS(__VA_ARGS__),		\
+				       __VA_ARGS__)			\
+	UK_SYSCALL_USR_PROLOGUE_DEFINE(__UK_NAME2SCALLR_FN(name),	\
+				       __UK_NAME2SCALLR_FN(u_##name),	\
+				       UK_NARGS(__VA_ARGS__),		\
+				       __VA_ARGS__)			\
+	_UK_LLSYSCALL_R_U_DEFINE(UK_NARGS(__VA_ARGS__),			\
+				UK_NACTUAL_ARGS(__VA_ARGS__),		\
+			     rtype,					\
+			     name,					\
+			     __UK_NAME2SCALLE_FN(u_##name),		\
+			     __UK_NAME2SCALLR_FN(u_##name),		\
+			     __VA_ARGS__)
+
 /*
  * UK_SYSCALL_R_DEFINE()
  * Based on UK_LLSYSCALL_R_DEFINE and provides a libc-style wrapper
