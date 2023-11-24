@@ -116,18 +116,21 @@
 	 */
 	mrs	x0, tpidr_el1
 	ldr	x0, [x0, #LCPU_AUXSP_OFFSET]
+	bic	x0, x0, #(UK_SYSCALL_REGS_END_ALIGN - 1)
+	sub	x0, x0, #UK_SYSCALL_REGS_SIZE
 
 	/* We now have in SP the trap stack and in x0 the auxiliary stack */
 	EXCHANGE_SP_WITH_X0  /* Switch them */
 	/* Restore old SP we stored before system call check */
 	ldr	x0, [x0, #-16]
-	str	x0, [sp, #-16]  /* Store old SP in auxiliary stack */
+	str	x0, [sp, #__SP_OFFSET]  /* Store old SP in auxiliary stack */
+	b	1f
 0:
 	/* Restore x0 */
 	mrs     x0, tpidrro_el0
 
-	/* Begin saving registers */
 	sub	sp, sp, #__TRAP_STACK_SIZE
+1:
 
 	/* Save general purpose registers */
 	stp	x0, x1, [sp, #16 * 0]

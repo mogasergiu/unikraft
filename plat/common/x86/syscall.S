@@ -36,6 +36,7 @@
 #include <uk/asm.h>
 #include <uk/asm/cfi.h>
 #include <uk/plat/common/lcpu.h>
+#include <uk/syscall.h>
 
 ENTRY(_ukplat_syscall)
 	.cfi_startproc simple
@@ -64,6 +65,11 @@ ENTRY(_ukplat_syscall)
 	 * in the Red Zone.
 	 */
 	movq	%gs:LCPU_AUXSP_OFFSET, %rsp
+	andq	$(~(UK_SYSCALL_REGS_END_ALIGN - 1)), %rsp
+	.cfi_def_cfa rsp, 0
+
+	subq	$(UK_SYSCALL_REGS_SIZE - __REGS_SIZEOF), %rsp
+	.cfi_adjust_cfa_offset (UK_SYSCALL_REGS_SIZE - __REGS_SIZEOF)
 
 	pushq	$(GDT_DESC_OFFSET(GDT_DESC_DATA))
 	.cfi_adjust_cfa_offset 8
