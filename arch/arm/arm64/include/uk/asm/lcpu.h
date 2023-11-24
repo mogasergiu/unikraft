@@ -220,6 +220,8 @@ struct __regs {
 	__u8 pad[8];
 };
 
+UK_CTASSERT(sizeof(struct __regs) == __REGS_SIZEOF);
+
 /*
  * Change this structure must update __CALLEE_SAVED_SIZE at the
  * same time.
@@ -234,6 +236,8 @@ struct __callee_saved_regs {
 	/* Link Register (x30) */
 	uint64_t lr;
 };
+
+UK_CTASSERT(sizeof(struct __callee_saved_regs) == __CALLEE_SAVED_SIZE);
 
 /*
  * Instruction Synchronization Barrier flushes the pipeline in the
