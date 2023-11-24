@@ -213,6 +213,73 @@ typedef long uk_syscall_arg_t;
 #define __UK_NAME2SCALLE_FN(name) UK_CONCAT(uk_syscall_e_, name)
 #define __UK_NAME2SCALLR_FN(name) UK_CONCAT(uk_syscall_r_, name)
 
+#define UK_USR_MAP0(...)
+/* Taken from regmap_linuxabi.h, but defined differently so as not to
+ * needlessly contaminate the namespace of source files including this header
+ */
+#if (defined __X86_64__)
+#define usr_arg0		rdi
+#define usr_arg1		rsi
+#define usr_arg2		rdx
+#define usr_arg3		r10
+#define usr_arg4		r8
+#define usr_arg5		r9
+#elif (defined __ARM_64__)
+#define usr_arg0		x[0]
+#define usr_arg1		x[1]
+#define usr_arg2		x[2]
+#define usr_arg3		x[3]
+#define usr_arg4		x[4]
+#define usr_arg5		x[5]
+#else
+#error "Missing register mappings for selected target architecture"
+#endif  /* !__X86_64__ && !__ARM_64__ */
+
+#define UK_USR_MAP2_1(m, type, arg) (type)usr->regs.usr_arg0
+
+#define UK_USR_MAP2_2(m, type, arg) (type)usr->regs.usr_arg1
+#define UK_USR_MAP4_2(m, type, arg, ...)					\
+	(type)usr->regs.usr_arg0, UK_USR_MAP2_2(m, __VA_ARGS__)
+
+#define UK_USR_MAP2_3(m, type, arg) (type)usr->regs.usr_arg2
+#define UK_USR_MAP4_3(m, type, arg, ...)					\
+	(type)usr->regs.usr_arg1, UK_USR_MAP2_3(m, __VA_ARGS__)
+#define UK_USR_MAP6_3(m, type, arg, ...)					\
+	(type)usr->regs.usr_arg0, UK_USR_MAP4_3(m, __VA_ARGS__)
+
+#define UK_USR_MAP2_4(m, type, arg) (type)usr->regs.usr_arg3
+#define UK_USR_MAP4_4(m, type, arg, ...)					\
+	(type)usr->regs.usr_arg2, UK_USR_MAP2_4(m, __VA_ARGS__)
+#define UK_USR_MAP6_4(m, type, arg, ...)					\
+	(type)usr->regs.usr_arg1, UK_USR_MAP4_4(m, __VA_ARGS__)
+#define UK_USR_MAP8_4(m, type, arg, ...)					\
+	(type)usr->regs.usr_arg0, UK_USR_MAP6_4(m, __VA_ARGS__)
+
+#define UK_USR_MAP2_5(m, type, arg) (type)usr->regs.usr_arg4
+#define UK_USR_MAP4_5(m, type, arg, ...)					\
+	(type)usr->regs.usr_arg3, UK_USR_MAP2_5(m, __VA_ARGS__)
+#define UK_USR_MAP6_5(m, type, arg, ...)					\
+	(type)usr->regs.usr_arg2, UK_USR_MAP4_5(m, __VA_ARGS__)
+#define UK_USR_MAP8_5(m, type, arg, ...)					\
+	(type)usr->regs.usr_arg1, UK_USR_MAP6_5(m, __VA_ARGS__)
+#define UK_USR_MAP10_5(m, type, arg, ...)					\
+	(type)usr->regs.usr_arg0, UK_USR_MAP8_5(m, __VA_ARGS__)
+
+#define UK_USR_MAP2_6(m, type, arg) (type)usr->regs.usr_arg5
+#define UK_USR_MAP4_6(m, type, arg, ...)					\
+	(type)usr->regs.usr_arg4, UK_USR_MAP2_6(m, __VA_ARGS__)
+#define UK_USR_MAP6_6(m, type, arg, ...)					\
+	(type)usr->regs.usr_arg3, UK_USR_MAP4_6(m, __VA_ARGS__)
+#define UK_USR_MAP8_6(m, type, arg, ...)					\
+	(type)usr->regs.usr_arg2, UK_USR_MAP6_6(m, __VA_ARGS__)
+#define UK_USR_MAP10_6(m, type, arg, ...)					\
+	(type)usr->regs.usr_arg1, UK_USR_MAP8_6(m, __VA_ARGS__)
+#define UK_USR_MAP12_6(m, type, arg, ...)				\
+	(type)usr->regs.usr_arg0, UK_USR_MAP10_6(m, __VA_ARGS__)
+#define UK_USR_MAPx(nr_args, nr_actual_args, ...)				\
+	UK_CONCAT(UK_CONCAT(UK_USR_MAP, nr_args),			\
+		  _##nr_actual_args)(__VA_ARGS__)
+
 #define  UK_ARG_MAP0(...)
 #define  UK_ARG_MAP2(m, type, arg) m(type, arg)
 #define  UK_ARG_MAP4(m, type, arg, ...) m(type, arg), UK_ARG_MAP2(m, __VA_ARGS__)
