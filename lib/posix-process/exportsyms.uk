@@ -1,3 +1,4 @@
+alarm
 execl
 execle
 execlp
@@ -42,3 +43,13 @@ uk_posix_process_create
 uk_posix_process_kill
 clone
 vfork
+kill
+pause
+sigaddset
+sigaltstack
+sigdelset
+sigemptyset
+sigfillset
+sigismember
+sigprocmask
+tgkill
