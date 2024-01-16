@@ -4,6 +4,7 @@ menuconfig LIBUKBOOT
 	select LIBUKDEBUG
 	select LIBUKARGPARSE
 	select HAVE_BOOTENTRY
+	imply LIBUKBOOT_MAINTHREAD if HAVE_SHUTDOWN
 	default y
 
 	# FIXME: binary buddy allocator is hard-coded for now
