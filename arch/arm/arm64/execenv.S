@@ -4,21 +4,54 @@
  * You may not use this file except in compliance with the License.
  */
 
+#include <uk/arch/ctx.h>
 #include <uk/arch/lcpu.h>
 #include <uk/asm.h>
-#include <uk/syscall.h>
 
-ENTRY(uk_syscall_ctx_popall)
+/**
+ * Loads a given execution environment on the currently executing CPU.
+ *
+ * NOTE: This function cannot be returned from, it overwrites the entire current
+ *       context.
+ *
+ * @X0 execenv
+ *   Reference to execution environment to load
+ */
+ENTRY(ukarch_execenv_load)
 	/* Mask IRQ to make sure restore would not be interrupted by IRQ */
 	msr	daifset, #2
 
-	mov	x0, sp
-	add	x0, x0, #(__REGS_SIZEOF + UKARCH_SYSREGS_SIZE)
-	bl	ukarch_ectx_store
+	/**
+	 * Assign pointer to execution environment to load (first argument).
+	 * We do this because it will be easy to keep track of it as, unlike
+	 * x0, we do not have to store/restore sp across function calls.
+	 */
+	mov	sp, x0
 
+	/**
+	 * Load execenv's stored ECTX which resides at offset:
+	 * sizeof(struct __regs) + sizeof(struct ukarch_sysctx) from beginning
+	 * of execenv.
+	 */
+	add	x0, x0, #(__REGS_SIZEOF + UKARCH_SYSCTX_SIZE)
+	bl	ukarch_ectx_load
+	/**
+	 * As stated previously, after function calls, %rsp preserved value of
+	 * execenv pointer so restore that into %rdi.
+	 */
 	mov	x0, sp
+
+	/**
+	 * Load execenv's stored system context which resides at offset:
+	 * sizeof(struct __regs) from beginning of execenv.
+	 */
 	add	x0, x0, #(__REGS_SIZEOF)
-	bl	ukarch_sysregs_switch_ul
+	bl	ukarch_sysctx_load
+
+	/**
+	 * Load execenv's stored general purpose registers which resides at
+	 * the beginning.
+	 */
 
 	/* Restore pstate and exception status register */
 	ldp x22, x23, [sp, #16 * 16]
