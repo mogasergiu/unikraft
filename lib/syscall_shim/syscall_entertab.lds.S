@@ -4,6 +4,15 @@
  * You may not use this file except in compliance with the License.
  */
 
-#include <uk/syscall.h>
+SECTIONS
+{
+	. = ALIGN(8);
 
-__thread unsigned long uk_syscall_nested_depth;
+	.uk_syscall_entertab :
+	{
+		PROVIDE(uk_syscall_entertab_start = .);
+		KEEP(*(SORT_BY_NAME(.uk_syscall_entertab[0-9])))
+		PROVIDE(uk_syscall_entertab_end = .);
+	}
+}
+INSERT AFTER .rodata;

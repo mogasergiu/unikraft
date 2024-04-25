@@ -44,13 +44,56 @@
 #include <uk/errptr.h>
 #include <errno.h>
 #include <stdarg.h>
+#include <stddef.h>
 #include <uk/print.h>
 #include <uk/legacy_syscall.h>
 #include <uk/bits/syscall_linuxabi.h>
+#include <uk/syscall_exittab.h>
+#include <uk/syscall_entertab.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#if CONFIG_LIBSYSCALL_SHIM
+static inline
+void _uk_syscall_wrapper_do_entertab(struct ukarch_execenv *execenv)
+{
+	struct uk_syscall_enter_ctx enter_ctx;
+
+	uk_syscall_nested_depth++;
+
+	uk_syscall_enter_ctx_init(&enter_ctx,
+				  execenv,
+				  uk_syscall_nested_depth,
+				  0);
+	uk_syscall_entertab_run(&enter_ctx);
+}
+#else /* !CONFIG_LIBSYSCALL_SHIM */
+static inline
+void _uk_syscall_wrapper_do_entertab(struct ukarch_execenv *execenv __unused)
+{ }
+#endif /* !CONFIG_LIBSYSCALL_SHIM */
+
+#if CONFIG_LIBSYSCALL_SHIM
+static inline
+void _uk_syscall_wrapper_do_exittab(struct ukarch_execenv *execenv)
+{
+	struct uk_syscall_exit_ctx exit_ctx;
+
+	uk_syscall_exit_ctx_init(&exit_ctx,
+				 execenv,
+				 uk_syscall_nested_depth,
+				 0);
+	uk_syscall_exittab_run(&exit_ctx);
+
+	uk_syscall_nested_depth--;
+}
+#else /* !CONFIG_LIBSYSCALL_SHIM */
+static inline
+void _uk_syscall_wrapper_do_exittab(struct ukarch_execenv *execenv __unused)
+{ }
+#endif /* !CONFIG_LIBSYSCALL_SHIM */
 
 /*
  * Whenever the hidden Config.uk option LIBSYSCALL_SHIM_NOWRAPPER
@@ -267,9 +310,15 @@ typedef long uk_syscall_arg_t;
 	{								\
 		long ret;						\
 									\
+		_uk_syscall_wrapper_do_entertab(NULL);			\
+									\
 		__UK_SYSCALL_PRINTD(x, rtype, ename, __VA_ARGS__);	\
+									\
 		ret = (long) __##ename(					\
 			UK_ARG_MAPx(x, UK_S_ARG_CAST_ACTUAL, __VA_ARGS__)); \
+									\
+		_uk_syscall_wrapper_do_exittab(NULL);			\
+									\
 		return ret;						\
 	}								\
 	static inline rtype __##ename(UK_ARG_MAPx(x,			\
@@ -348,8 +397,14 @@ typedef long uk_syscall_arg_t;
 		long ret;						\
 									\
 		__UK_SYSCALL_PRINTD(x, rtype, rname, __VA_ARGS__);	\
+									\
+		_uk_syscall_wrapper_do_entertab(NULL);			\
+									\
 		ret = (long) __##rname(					\
 			UK_ARG_MAPx(x, UK_S_ARG_CAST_ACTUAL, __VA_ARGS__)); \
+									\
+		_uk_syscall_wrapper_do_exittab(NULL);			\
+									\
 		return ret;						\
 	}								\
 	static inline rtype __##rname(UK_ARG_MAPx(x,			\
@@ -380,7 +435,7 @@ typedef long uk_syscall_arg_t;
 	static inline rtype __##rname(UK_EXECENV_DECLMAPx(UK_S_EXECENV_ARG_ACTUAL,\
 						      x, UK_S_ARG_ACTUAL,\
 						      __VA_ARGS__));	\
-	long __used rname(long _execenv)					\
+	long __used rname(long _execenv)				\
 	{								\
 		struct ukarch_execenv *execenv;				\
 		long ret;						\
@@ -388,12 +443,18 @@ typedef long uk_syscall_arg_t;
 		execenv = (struct ukarch_execenv *)_execenv;		\
 		__UK_SYSCALL_EXECENV_PRINTD(execenv, x, rtype, rname,	\
 					    __VA_ARGS__);		\
+									\
+		_uk_syscall_wrapper_do_entertab(execenv);		\
+									\
 		ret = (long) __##rname(UK_EXECENV_CALLMAPx(x,		\
 						   UK_S_ARG_ACTUAL,	\
 						   __VA_ARGS__));	\
+									\
+		_uk_syscall_wrapper_do_exittab(execenv);		\
+									\
 		return ret;						\
 	}								\
-	static inline rtype __used __##rname(UK_EXECENV_DECLMAPx(		\
+	static inline rtype __used __##rname(UK_EXECENV_DECLMAPx(	\
 					     UK_S_EXECENV_ARG_ACTUAL_MAYBE_UNUSED,\
 					     x, UK_S_ARG_ACTUAL_MAYBE_UNUSED,\
 					     __VA_ARGS__))

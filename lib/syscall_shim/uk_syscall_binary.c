@@ -78,6 +78,8 @@ void ukplat_syscall_handler(struct uk_syscall_ctx *usc)
 #endif /* !CONFIG_LIBSYSCALL_SHIM_STRACE_ANSI_COLOR */
 	int prsyscalllen __maybe_unused;
 #endif /* CONFIG_LIBSYSCALL_SHIM_STRACE */
+	struct uk_syscall_enter_ctx enter_ctx;
+	struct uk_syscall_exit_ctx exit_ctx;
 	struct ukarch_auxspcb *auxspcb;
 	struct ukarch_execenv *execenv;
 #if CONFIG_LIBSYSCALL_SHIM_HANDLER_ULTLS
@@ -116,7 +118,19 @@ void ukplat_syscall_handler(struct uk_syscall_ctx *usc)
 		    execenv->regs.__syscall_rarg1);
 #endif /* CONFIG_LIBSYSCALL_SHIM_DEBUG_HANDLER */
 
+	uk_syscall_nested_depth++;
+	uk_syscall_enter_ctx_init(&enter_ctx,
+				  execenv, uk_syscall_nested_depth,
+				  UK_SYSCALL_ENTER_CTX_BINARY_SYSCALL);
+	uk_syscall_entertab_run(&enter_ctx);
+
 	execenv->regs.__syscall_rret0 = uk_syscall6_r_e(execenv);
+
+	uk_syscall_exit_ctx_init(&exit_ctx,
+				 execenv, uk_syscall_nested_depth,
+				 UK_SYSCALL_EXIT_CTX_BINARY_SYSCALL);
+	uk_syscall_exittab_run(&exit_ctx);
+	uk_syscall_nested_depth--;
 
 #if CONFIG_LIBSYSCALL_SHIM_STRACE
 	prsyscalllen = uk_snprsyscall(prsyscallbuf, ARRAY_SIZE(prsyscallbuf),
