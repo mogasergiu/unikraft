@@ -340,6 +340,50 @@ void ukarch_ctx_init_entry2(struct ukarch_ctx *ctx,
  */
 void ukarch_ctx_switch(struct ukarch_ctx *store, struct ukarch_ctx *load);
 
+/*
+ * (Full) Execution environment functions must return into environment restoring
+ * function.
+ */
+typedef void (*ukarch_ehtrampo_entry)(struct ukarch_execenv *, long);
+
+/**
+ * Initializes a context struct with stack pointer and
+ * entrance function to trampoline to from an exception handler
+ * to an I/O-able context.
+ * Does not guarantee any register states on entry of the entrance
+ * function. The entrance functions will always have two arguments
+ * second being the one requested upon this function call
+ * and first being a pointer to the execution environment
+ * saved on the stack that would allow, on exit from the entrance
+ * function, to fully return to the context described by the
+ * general purpose register arguments. Intuitively, when switching
+ * to the context returned in the first argument, the extended
+ * context (FPU, SIMD, etc) as well as the system context (TLS, etc.)
+ * are saved in the slot of the execution environment passed as
+ * argument to the entrance function.
+ *
+ * This function is most useful when wanting to go from an exception
+ * handler to an I/O-able context while being able to return to the
+ * place that the exception handler was supposed to return to.
+ *
+ * @param ctx
+ *   Reference to context to initialize
+ * @param sp
+ *   Stack pointer (required and must be aligned to `UKARCH_AUXSP_ALIGN`)
+ * @param r
+ *   Pointer to architecture specific general purpose registers saved on
+ *    exception handling entry
+ * @param entry
+ *   Entry function to execute (required). First argument must always be
+ *    the execution environment pointer
+ * @param arg
+ *   The argument `entry` callback will receive
+ */
+void ukarch_ctx_init_ehtrampo(struct ukarch_ctx *ctx,
+			      struct __regs *r,
+			      __uptr sp,
+			      ukarch_ehtrampo_entry entry, long arg);
+
 /**
  * Initialize an auxiliary stack pointer. This must be always called the
  * first time you create an auxiliary stack pointer.
