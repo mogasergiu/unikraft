@@ -101,16 +101,6 @@ void ukplat_syscall_handler(struct uk_syscall_ctx *usc)
 	UK_ASSERT(t->uktlsp == ukarch_auxspcb_get_uktlsp(auxspcb));
 #endif /* CONFIG_LIBSYSCALL_SHIM_HANDLER_ULTLS */
 
-#if CONFIG_LIBSYSCALL_SHIM_DEBUG_HANDLER
-	_uk_printd(uk_libid_self(), __STR_BASENAME__, __LINE__,
-			"Binary system call request \"%s\" (%lu) at ip:%p (arg0=0x%lx, arg1=0x%lx, ...)\n",
-		    uk_syscall_name(execenv->regs.__syscall_rsyscall),
-		    execenv->regs.__syscall_rsyscall,
-		    (void *)execenv->regs.__syscall_rip,
-		    execenv->regs.__syscall_rarg0,
-		    execenv->regs.__syscall_rarg1);
-#endif /* CONFIG_LIBSYSCALL_SHIM_DEBUG_HANDLER */
-
 	uk_syscall_nested_depth++;
 	uk_syscall_enter_ctx_init(&enter_ctx,
 				  execenv, uk_syscall_nested_depth,
@@ -129,6 +119,30 @@ void ukplat_syscall_handler(struct uk_syscall_ctx *usc)
 	t->tlsp = ukarch_sysctx_get_tlsp(&execenv->sysctx);
 #endif /* CONFIG_LIBSYSCALL_SHIM_HANDLER_ULTLS */
 }
+
+#if CONFIG_LIBSYSCALL_SHIM_DEBUG_HANDLER
+static void binary_syscall_debug_handler(struct uk_syscall_enter_ctx *enter_ctx)
+{
+	struct ukarch_execenv *execenv;
+
+	UK_ASSERT(enter_ctx);
+
+	if (!(enter_ctx->flags & UK_SYSCALL_ENTER_CTX_BINARY_SYSCALL))
+		return;
+
+	execenv = enter_ctx->execenv;
+
+	_uk_printd(uk_libid_self(), __STR_BASENAME__, __LINE__,
+		   "Binary system call request \"%s\" (%lu) at ip:%p (arg0=0x%lx, arg1=0x%lx, ...)\n",
+		   uk_syscall_name(execenv->regs.__syscall_rsyscall),
+		   execenv->regs.__syscall_rsyscall,
+		   (void *)execenv->regs.__syscall_rip,
+		   execenv->regs.__syscall_rarg0,
+		   execenv->regs.__syscall_rarg1);
+}
+
+uk_syscall_entertab_prio(binary_syscall_debug_handler, UK_PRIO_EARLIEST);
+#endif /* CONFIG_LIBSYSCALL_SHIM_DEBUG_HANDLER */
 
 #if CONFIG_LIBSYSCALL_SHIM_STRACE
 static void binary_syscall_strace(struct uk_syscall_exit_ctx *exit_ctx)
