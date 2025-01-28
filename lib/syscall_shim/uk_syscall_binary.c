@@ -40,6 +40,7 @@
 #include <uk/arch/ctx.h>
 #include <uk/assert.h>
 #include <uk/essentials.h>
+#include <uk/prio.h>
 #include <uk/thread.h>
 #if CONFIG_LIBSYSCALL_SHIM_STRACE
 #if CONFIG_LIBUKCONSOLE
@@ -70,14 +71,6 @@ struct uk_syscall_ctx {
 
 void ukplat_syscall_handler(struct uk_syscall_ctx *usc)
 {
-#if CONFIG_LIBSYSCALL_SHIM_STRACE
-#if CONFIG_LIBSYSCALL_SHIM_STRACE_ANSI_COLOR
-	char prsyscallbuf[512]; /* ANSI color is pretty hungry */
-#else /* !CONFIG_LIBSYSCALL_SHIM_STRACE_ANSI_COLOR */
-	char prsyscallbuf[256];
-#endif /* !CONFIG_LIBSYSCALL_SHIM_STRACE_ANSI_COLOR */
-	int prsyscalllen __maybe_unused;
-#endif /* CONFIG_LIBSYSCALL_SHIM_STRACE */
 	struct uk_syscall_enter_ctx enter_ctx;
 	struct uk_syscall_exit_ctx exit_ctx;
 	struct ukarch_auxspcb *auxspcb;
@@ -132,7 +125,29 @@ void ukplat_syscall_handler(struct uk_syscall_ctx *usc)
 	uk_syscall_exittab_run(&exit_ctx);
 	uk_syscall_nested_depth--;
 
+#if CONFIG_LIBSYSCALL_SHIM_HANDLER_ULTLS
+	t->tlsp = ukarch_sysctx_get_tlsp(&execenv->sysctx);
+#endif /* CONFIG_LIBSYSCALL_SHIM_HANDLER_ULTLS */
+}
+
 #if CONFIG_LIBSYSCALL_SHIM_STRACE
+static void binary_syscall_strace(struct uk_syscall_exit_ctx *exit_ctx)
+{
+#if CONFIG_LIBSYSCALL_SHIM_STRACE_ANSI_COLOR
+	char prsyscallbuf[512]; /* ANSI color is pretty hungry */
+#else /* !CONFIG_LIBSYSCALL_SHIM_STRACE_ANSI_COLOR */
+	char prsyscallbuf[256];
+#endif /* !CONFIG_LIBSYSCALL_SHIM_STRACE_ANSI_COLOR */
+	int prsyscalllen __maybe_unused;
+	struct ukarch_execenv *execenv;
+
+	UK_ASSERT(exit_ctx);
+
+	if (!(exit_ctx->flags & UK_SYSCALL_EXIT_CTX_BINARY_SYSCALL))
+		return;
+
+	execenv = exit_ctx->execenv;
+
 	prsyscalllen = uk_snprsyscall(prsyscallbuf, ARRAY_SIZE(prsyscallbuf),
 #if CONFIG_LIBSYSCALL_SHIM_STRACE_ANSI_COLOR
 		     UK_PRSYSCALL_FMTF_ANSICOLOR | UK_PRSYSCALL_FMTF_NEWLINE,
@@ -155,13 +170,11 @@ void ukplat_syscall_handler(struct uk_syscall_ctx *usc)
 	 * print calls also turn into a no-op if `ukconsole` is not available.
 	 */
 #if CONFIG_LIBUKCONSOLE
-	uk_console_out(prsyscallbuf, (__sz) prsyscalllen);
+	uk_console_out(prsyscallbuf, (__sz)prsyscalllen);
 #else /* !CONFIG_LIBUKCONSOLE */
 	uk_pr_info(prsyscallbuf);
 #endif /* !CONFIG_LIBUKCONSOLE */
-#endif /* CONFIG_LIBSYSCALL_SHIM_STRACE */
-
-#if CONFIG_LIBSYSCALL_SHIM_HANDLER_ULTLS
-	t->tlsp = ukarch_sysctx_get_tlsp(&execenv->sysctx);
-#endif /* CONFIG_LIBSYSCALL_SHIM_HANDLER_ULTLS */
 }
+
+uk_syscall_exittab_prio(binary_syscall_strace, UK_PRIO_LATEST);
+#endif /* CONFIG_LIBSYSCALL_SHIM_STRACE */
