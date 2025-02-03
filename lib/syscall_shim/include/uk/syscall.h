@@ -176,8 +176,8 @@ typedef long uk_syscall_arg_t;
 	, (long)execenv->regs.__syscall_rarg1 UK_EXECENV_EMAP8_12(m, __VA_ARGS__)
 #define UK_EXECENV_EMAP12_12(m, type, arg, ...)				\
 	, (long)execenv->regs.__syscall_rarg0 UK_EXECENV_EMAP10_12(m, __VA_ARGS__)
-#define UK_EXECENV_EMAPx(nr_args, ...)					\
-	(long)execenv UK_CONCAT(UK_CONCAT(UK_EXECENV_EMAP, nr_args),		\
+#define UK_EXECENV_EMAPx(execenv, nr_args, ...)				\
+	(long)execenv UK_CONCAT(UK_CONCAT(UK_EXECENV_EMAP, nr_args),	\
 		      _##nr_args)(__VA_ARGS__)
 
 /* Variant of UK_ARG_MAPx() but prepends a comma if nr_args > 0 */
@@ -224,7 +224,7 @@ typedef long uk_syscall_arg_t;
 		   "(" UK_ARG_FMT_MAPx(x, UK_S_ARG_FMT_LONGX, __VA_ARGS__) ")\n" \
 		   UK_ARG_EMAPx(x, UK_S_ARG_CAST_LONG, __VA_ARGS__) )
 
-#define __UK_SYSCALL_EXECENV_PRINTD(x, rtype, fname, ...)			\
+#define __UK_SYSCALL_EXECENV_PRINTD(execenv, x, rtype, fname, ...)	\
 	uk_printd("\nInvoking context saving %s system call.\n",	\
 		  STRINGIFY(fname));					\
 	_uk_printd(uk_libid_self(), __STR_BASENAME__, __LINE__,		\
@@ -232,7 +232,7 @@ typedef long uk_syscall_arg_t;
 		   "( execenv 0x%lx, " UK_ARG_FMT_MAPx(x,		\
 						       UK_S_ARG_FMT_LONGX,\
 						       __VA_ARGS__) ")\n",\
-		   UK_EXECENV_EMAPx(x, UK_S_ARG_CAST_LONG, __VA_ARGS__))
+		   UK_EXECENV_EMAPx(execenv, x, UK_S_ARG_CAST_LONG, __VA_ARGS__))
 #else
 #define __UK_SYSCALL_PRINTD(...) do {} while(0)
 #define __UK_SYSCALL_EXECENV_PRINTD(...) do {} while(0)
@@ -386,8 +386,8 @@ typedef long uk_syscall_arg_t;
 		long ret;						\
 									\
 		execenv = (struct ukarch_execenv *)_execenv;		\
-		__UK_SYSCALL_EXECENV_PRINTD(x, rtype, rname,		\
-					__VA_ARGS__);			\
+		__UK_SYSCALL_EXECENV_PRINTD(execenv, x, rtype, rname,	\
+					    __VA_ARGS__);		\
 		ret = (long) __##rname(UK_EXECENV_CALLMAPx(x,		\
 						   UK_S_ARG_ACTUAL,	\
 						   __VA_ARGS__));	\
