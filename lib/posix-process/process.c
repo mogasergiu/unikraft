@@ -580,23 +580,28 @@ UK_LLSYSCALL_R_DEFINE(int, exit, int, status)
 	return -EFAULT;
 }
 
-UK_LLSYSCALL_R_DEFINE(int, exit_group, int, status)
+static int pprocess_exit(int status __unused)
 {
 	uk_posix_process_kill(uk_thread_current()); /* won't return */
 	UK_CRASH("sys_exit_group() unexpectedly returned\n");
 	return -EFAULT;
 }
 
+UK_LLSYSCALL_R_DEFINE(int, exit_group, int, status)
+{
+	return pprocess_exit(status);
+}
+
 #if UK_LIBC_SYSCALLS
 __noreturn void exit(int status)
 {
-	uk_syscall_r_exit_group(status);
+	pprocess_exit(status);
 	UK_CRASH("sys_exit_group() unexpectedly returned\n");
 }
 
 __noreturn void exit_group(int status)
 {
-	uk_syscall_r_exit_group(status);
+	pprocess_exit(status);
 	UK_CRASH("sys_exit_group() unexpectedly returned\n");
 }
 #endif /* UK_LIBC_SYSCALLS */
