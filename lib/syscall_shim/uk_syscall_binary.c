@@ -107,7 +107,7 @@ void ukplat_syscall_handler(struct uk_syscall_ctx *usc)
 				  UK_SYSCALL_ENTER_CTX_BINARY_SYSCALL);
 	uk_syscall_entertab_run(&enter_ctx);
 
-	execenv->regs.__syscall_rret0 = uk_syscall6_r_e(execenv);
+	execenv->regs.__syscall_rret0 = uk_syscall6_do_e(execenv);
 
 	uk_syscall_exit_ctx_init(&exit_ctx,
 				 execenv, uk_syscall_nested_depth,
