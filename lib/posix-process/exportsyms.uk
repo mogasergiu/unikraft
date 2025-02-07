@@ -32,6 +32,7 @@ waitpid
 waitid
 getpid
 getppid
+uk_sys_gettid
 gettid
 exit
 exit_group
