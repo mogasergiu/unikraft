@@ -373,7 +373,7 @@ UK_POSIX_CLONE_HANDLER(CLONE_CHILD_CLEARTID, true, pfutex_child_cleartid, 0x0);
  */
 UK_LLSYSCALL_R_DEFINE(pid_t, set_tid_address, pid_t *, tid_ref)
 {
-	pid_t self_tid = uk_syscall_r_gettid();
+	pid_t self_tid = uk_sys_gettid();
 
 	if (self_tid >= 0) {
 		/* Store new reference */
