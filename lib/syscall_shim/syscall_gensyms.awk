@@ -5,5 +5,8 @@
 	if (substr($0, length($0)) == "e") {
 		printf "uk_syscall_r_e_%s\n", name;
 		printf "uk_syscall_e_e_%s\n", name;
+		printf "uk_syscall_do_e_%s\n", name;
+	} else {
+		printf "uk_syscall_do_%s\n", name;
 	}
 }
