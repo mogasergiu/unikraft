@@ -530,7 +530,7 @@ pid_t ukthread2pid(struct uk_thread *thread)
 	return pthread->process->pid;
 }
 
-UK_SYSCALL_R_DEFINE(pid_t, getpid)
+pid_t uk_sys_getpid(void)
 {
 	if (!pthread_self)
 		return -ENOTSUP;
@@ -655,7 +655,7 @@ UK_POSIX_CLONE_HANDLER(CLONE_THREAD, false, pprocess_clone_thread, 0x0);
 #define UNIKRAFT_TID      1
 #define UNIKRAFT_PPID     0
 
-UK_SYSCALL_R_DEFINE(int, getpid)
+pid_t uk_sys_getpid(void)
 {
 	return UNIKRAFT_PID;
 }
@@ -680,4 +680,9 @@ UK_SYSCALL_R_DEFINE(pid_t, gettid)
 UK_SYSCALL_R_DEFINE(pid_t, getppid)
 {
 	return uk_sys_getppid();
+}
+
+UK_SYSCALL_R_DEFINE(pid_t, getpid)
+{
+	return uk_sys_getpid();
 }

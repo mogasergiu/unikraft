@@ -149,6 +149,7 @@ static inline int uk_sys_setrlimit(int resource, const struct rlimit *rlim)
 
 pid_t uk_sys_gettid(void);
 pid_t uk_sys_getppid(void);
+pid_t uk_sys_getpid(void);
 
 #if CONFIG_LIBUKSCHED
 int uk_posix_process_create(struct uk_alloc *a,
