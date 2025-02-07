@@ -548,7 +548,7 @@ pid_t uk_sys_gettid(void)
 }
 
 /* PID of parent process  */
-UK_SYSCALL_R_DEFINE(pid_t, getppid)
+pid_t uk_sys_getppid(void)
 {
 	if (!pthread_self)
 		return -ENOTSUP;
@@ -665,7 +665,7 @@ pid_t uk_sys_gettid(void)
 	return UNIKRAFT_TID;
 }
 
-UK_SYSCALL_R_DEFINE(pid_t, getppid)
+pid_t uk_sys_getppid(void)
 {
 	return UNIKRAFT_PPID;
 }
@@ -675,4 +675,9 @@ UK_SYSCALL_R_DEFINE(pid_t, getppid)
 UK_SYSCALL_R_DEFINE(pid_t, gettid)
 {
 	return uk_sys_gettid();
+}
+
+UK_SYSCALL_R_DEFINE(pid_t, getppid)
+{
+	return uk_sys_getppid();
 }

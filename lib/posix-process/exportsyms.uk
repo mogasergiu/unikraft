@@ -31,6 +31,7 @@ wait4
 waitpid
 waitid
 getpid
+uk_sys_getppid
 getppid
 uk_sys_gettid
 gettid
