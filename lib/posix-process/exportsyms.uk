@@ -30,6 +30,7 @@ wait3
 wait4
 waitpid
 waitid
+uk_sys_getpid
 getpid
 uk_sys_getppid
 getppid
