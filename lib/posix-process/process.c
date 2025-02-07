@@ -539,7 +539,7 @@ UK_SYSCALL_R_DEFINE(pid_t, getpid)
 	return pthread_self->process->pid;
 }
 
-UK_SYSCALL_R_DEFINE(pid_t, gettid)
+pid_t uk_sys_gettid(void)
 {
 	if (!pthread_self)
 		return -ENOTSUP;
@@ -660,7 +660,7 @@ UK_SYSCALL_R_DEFINE(int, getpid)
 	return UNIKRAFT_PID;
 }
 
-UK_SYSCALL_R_DEFINE(int, gettid)
+pid_t uk_sys_gettid(void)
 {
 	return UNIKRAFT_TID;
 }
@@ -671,3 +671,8 @@ UK_SYSCALL_R_DEFINE(pid_t, getppid)
 }
 
 #endif /* !CONFIG_LIBPOSIX_PROCESS_PIDS */
+
+UK_SYSCALL_R_DEFINE(pid_t, gettid)
+{
+	return uk_sys_gettid();
+}

@@ -38,6 +38,7 @@
 #include <uk/config.h>
 #include <stdbool.h>
 #include <sys/resource.h>
+#include <sys/types.h> /* pid_t */
 #if CONFIG_LIBUKSCHED
 #include <uk/thread.h>
 #endif
@@ -145,6 +146,8 @@ static inline int uk_sys_setrlimit(int resource, const struct rlimit *rlim)
 	return uk_sys_prlimit64(0, resource,
 				DECONST(struct rlimit *, rlim), NULL);
 }
+
+pid_t uk_sys_gettid(void);
 
 #if CONFIG_LIBUKSCHED
 int uk_posix_process_create(struct uk_alloc *a,
