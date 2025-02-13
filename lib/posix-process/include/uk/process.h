@@ -37,6 +37,7 @@
 #include <arch/clone.h>
 #include <uk/config.h>
 #include <stdbool.h>
+#include <sys/resource.h>
 #if CONFIG_LIBUKSCHED
 #include <uk/thread.h>
 #endif
@@ -130,6 +131,20 @@
 #define CLONE_CLEAR_SIGHAND	0x100000000ULL
 #endif
 #endif /* CONFIG_LIBPOSIX_PROCESS_CLONE */
+
+int uk_sys_prlimit64(int pid, unsigned int resource,
+		     struct rlimit *new_limit, struct rlimit *old_limit);
+
+static inline int uk_sys_getrlimit(int resource, struct rlimit *rlim)
+{
+	return uk_sys_prlimit64(0, resource, NULL, rlim);
+}
+
+static inline int uk_sys_setrlimit(int resource, const struct rlimit *rlim)
+{
+	return uk_sys_prlimit64(0, resource,
+				DECONST(struct rlimit *, rlim), NULL);
+}
 
 #if CONFIG_LIBUKSCHED
 int uk_posix_process_create(struct uk_alloc *a,

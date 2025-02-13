@@ -32,6 +32,7 @@ popen
 prctl
 uk_syscall_r_prctl
 uk_syscall_e_prctl
+uk_sys_prlimit64
 prlimit
 uk_syscall_r_prlimit64
 uk_syscall_e_prlimit64
