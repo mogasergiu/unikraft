@@ -186,7 +186,7 @@ UK_LLSYSCALL_R_DEFINE(int, openat, int, dirfd, const char *, pathname,
 		      int, flags, int, mode)
 {
 	if (pathname[0] == '/' || dirfd == AT_FDCWD) {
-		return uk_syscall_r_open((long int)pathname, flags, mode);
+		return uk_syscall_do_open((long int)pathname, flags, mode);
 	}
 
 	struct vfscore_file *fp;
@@ -208,7 +208,7 @@ UK_LLSYSCALL_R_DEFINE(int, openat, int, dirfd, const char *, pathname,
 	vn_unlock(vp);
 	fdrop(fp);
 
-	error = uk_syscall_r_open((long int)p, flags, mode);
+	error = uk_syscall_do_open((long int)p, flags, mode);
 
 	return error;
 }
@@ -1164,7 +1164,7 @@ UK_SYSCALL_R_DEFINE(int, mkdirat, int, dirfd,
 	int error;
 
 	if (pathname[0] == '/' || dirfd == AT_FDCWD)
-		return uk_syscall_r_mkdir((long) pathname, (long) mode);
+		return uk_syscall_do_mkdir((long) pathname, (long) mode);
 
 	error = fget(dirfd, &fp);
 	if (error)
@@ -1182,7 +1182,7 @@ UK_SYSCALL_R_DEFINE(int, mkdirat, int, dirfd,
 	vn_unlock(vp);
 	fdrop(fp);
 
-	error = uk_syscall_r_mkdir((long) p, (long) mode);
+	error = uk_syscall_do_mkdir((long) p, (long) mode);
 
 	return error;
 }
@@ -1527,9 +1527,9 @@ UK_SYSCALL_R_DEFINE(int, unlinkat, int, dirfd, const char*, pathname, int, flags
 {
 	if (pathname[0] == '/' || dirfd == AT_FDCWD) {
 		if (flags & AT_REMOVEDIR)
-			return uk_syscall_r_rmdir((long)pathname);
+			return uk_syscall_do_rmdir((long)pathname);
 		else
-			return uk_syscall_r_unlink((long)pathname);
+			return uk_syscall_do_unlink((long)pathname);
 	}
 
 	struct vfscore_file *fp;
@@ -1551,9 +1551,9 @@ UK_SYSCALL_R_DEFINE(int, unlinkat, int, dirfd, const char*, pathname, int, flags
 	fdrop(fp);
 
 	if (flags & AT_REMOVEDIR)
-		return uk_syscall_r_rmdir((long)p);
+		return uk_syscall_do_rmdir((long)p);
 	else
-		return uk_syscall_r_unlink((long)p);
+		return uk_syscall_do_unlink((long)p);
 }
 
 UK_TRACEPOINT(trace_vfs_stat, "\"%s\" %#x", const char*, struct stat*);
@@ -1663,7 +1663,7 @@ UK_SYSCALL_R_DEFINE(int, lstat, const char*, pathname, struct stat*, st)
 }
 
 /* The fstat syscall is no longer implemented here; need to declare */
-long uk_syscall_r_fstat(long dirfd, long st);
+long uk_syscall_do_fstat(long dirfd, long st);
 
 static int __fxstatat_helper(int ver __unused, int dirfd, const char *pathname,
 		struct stat *st, int flags)
@@ -1671,12 +1671,12 @@ static int __fxstatat_helper(int ver __unused, int dirfd, const char *pathname,
 	if (!pathname || !st)
 		return -EFAULT;
 	if (pathname[0] == '/' || dirfd == AT_FDCWD) {
-		return uk_syscall_r_stat((long) pathname, (long) st);
+		return uk_syscall_do_stat((long) pathname, (long) st);
 	}
 	// If AT_EMPTY_PATH and pathname is an empty string, fstatat() operates on
 	// dirfd itself, and in that case it doesn't have to be a directory.
 	if ((flags & AT_EMPTY_PATH) && !pathname[0]) {
-		return uk_syscall_r_fstat((long) dirfd, (long) st);
+		return uk_syscall_do_fstat((long) dirfd, (long) st);
 	}
 
 	struct vfscore_file *fp;
@@ -1698,9 +1698,9 @@ static int __fxstatat_helper(int ver __unused, int dirfd, const char *pathname,
 	fdrop(fp);
 
 	if (flags & AT_SYMLINK_NOFOLLOW)
-		error = uk_syscall_r_lstat((long) p, (long) st);
+		error = uk_syscall_do_lstat((long) p, (long) st);
 	else
-		error = uk_syscall_r_stat((long) p, (long) st);
+		error = uk_syscall_do_stat((long) p, (long) st);
 
 	return error;
 }
@@ -2063,13 +2063,13 @@ UK_SYSCALL_R_DEFINE(int, faccessat, int, dirfd, const char*, pathname, int, mode
 	if (flags & AT_SYMLINK_NOFOLLOW) {
 		struct stat st;
 
-		error = uk_syscall_r_lstat((long)p, (long)&st);
+		error = uk_syscall_do_lstat((long)p, (long)&st);
 		/* Check if the file is an actual symlink */
 		if (error == 0 && S_ISLNK(st.st_mode))
 			UK_CRASH("UNIMPLEMENTED: faccessat() with AT_SYMLINK_NOFOLLOW\n");
 	}
 
-	error = uk_syscall_r_access((long)p, (long)mode);
+	error = uk_syscall_do_access((long)p, (long)mode);
 
 out_error:
 	return error;
@@ -2077,7 +2077,7 @@ out_error:
 
 int euidaccess(const char *pathname, int mode)
 {
-	return uk_syscall_r_access((long) pathname, (long) mode);
+	return uk_syscall_do_access((long) pathname, (long) mode);
 }
 
 __weak_alias(euidaccess,eaccess);
@@ -2332,9 +2332,9 @@ UK_SYSCALL_R_DEFINE(int, utime, const char *, pathname,
 		times[0].tv_usec = 0;
 		times[1].tv_sec = t->modtime;
 		times[1].tv_usec = 0;
-		return uk_syscall_r_utimes((long) pathname, (long) times);
+		return uk_syscall_do_utimes((long) pathname, (long) times);
 	} else {
-		return uk_syscall_r_utimes((long) pathname, (long) NULL);
+		return uk_syscall_do_utimes((long) pathname, (long) NULL);
 	}
 }
 
