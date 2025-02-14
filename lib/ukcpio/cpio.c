@@ -50,16 +50,16 @@
 
 
 /* Raw filesystem syscalls; not provided by headers */
-int uk_syscall_r_open(const char *, int, mode_t);
-int uk_syscall_r_close(int);
-ssize_t uk_syscall_r_write(int, const void *, size_t);
-int uk_syscall_r_chmod(const char *, mode_t);
-int uk_syscall_r_utime(const char *, const struct utimbuf *);
-int uk_syscall_r_mkdir(const char *, mode_t);
-int uk_syscall_r_symlink(const char *, const char *);
-int uk_syscall_r_stat(const char *, struct stat *);
-int uk_syscall_r_unlinkat(int, const char *, int);
-int uk_syscall_r_rename(const char *, const char *);
+int uk_syscall_do_open(const char *, int, mode_t);
+int uk_syscall_do_close(int);
+ssize_t uk_syscall_do_write(int, const void *, size_t);
+int uk_syscall_do_chmod(const char *, mode_t);
+int uk_syscall_do_utime(const char *, const struct utimbuf *);
+int uk_syscall_do_mkdir(const char *, mode_t);
+int uk_syscall_do_symlink(const char *, const char *);
+int uk_syscall_do_stat(const char *, struct stat *);
+int uk_syscall_do_unlinkat(int, const char *, int);
+int uk_syscall_do_rename(const char *, const char *);
 
 static int
 try_rm_nonempty_dir(const char *path)
@@ -75,7 +75,7 @@ try_rm_nonempty_dir(const char *path)
 		return -ENAMETOOLONG;
 	}
 	strcpy(newend, ".0");
-	r = uk_syscall_r_rename(path, newpath);
+	r = uk_syscall_do_rename(path, newpath);
 	uk_pr_info("Rename '%s' to '%s': %d\n", path, newpath, r);
 	return r;
 }
@@ -85,12 +85,12 @@ try_remove(const char *path)
 {
 	int r;
 
-	r = uk_syscall_r_unlinkat(AT_FDCWD, path, 0);
+	r = uk_syscall_do_unlinkat(AT_FDCWD, path, 0);
 	uk_pr_info("Unlink %s: %d\n", path, r);
 	if (!r || r == -ENOENT)
 		return 0;
 
-	r = uk_syscall_r_unlinkat(AT_FDCWD, path, AT_REMOVEDIR);
+	r = uk_syscall_do_unlinkat(AT_FDCWD, path, AT_REMOVEDIR);
 	uk_pr_info("Rmdir %s: %d\n", path, r);
 	if (!r || r == -ENOENT)
 		return 0;
@@ -101,7 +101,7 @@ static int
 write_file(int fd, const char *contents, size_t len)
 {
 	while (len) {
-		ssize_t written = uk_syscall_r_write(fd, contents, len);
+		ssize_t written = uk_syscall_do_write(fd, contents, len);
 
 		if (unlikely(written < 0))
 			return written;
@@ -123,7 +123,7 @@ extract_file(const char *path, const char *contents, size_t len,
 
 	uk_pr_info("Extracting %s (%zu bytes)\n", path, len);
 
-	fd = uk_syscall_r_open(path, O_CREAT | O_WRONLY | O_EXCL, 0);
+	fd = uk_syscall_do_open(path, O_CREAT | O_WRONLY | O_EXCL, 0);
 	if (unlikely(fd == -EEXIST)) {
 		uk_pr_info("Path exists, trying removal\n");
 		err = try_remove(path);
@@ -131,7 +131,7 @@ extract_file(const char *path, const char *contents, size_t len,
 			/* Not fatal, following open may still succeed */
 			uk_pr_warn("%s: Path cleanup failed: %s (%d)\n",
 				   path, strerror(-err), -err);
-		fd = uk_syscall_r_open(path, O_CREAT | O_WRONLY | O_TRUNC, 0);
+		fd = uk_syscall_do_open(path, O_CREAT | O_WRONLY | O_TRUNC, 0);
 	}
 	if (unlikely(fd < 0)) {
 		uk_pr_err("%s: Failed to create file: %s (%d)\n",
@@ -148,18 +148,18 @@ extract_file(const char *path, const char *contents, size_t len,
 		goto close_out;
 	}
 
-	err = uk_syscall_r_chmod(path, mode);
+	err = uk_syscall_do_chmod(path, mode);
 	if (unlikely(err))
 		uk_pr_warn("%s: Failed to chmod: %s (%d)\n",
 			   path, strerror(-err), -err);
 
-	err = uk_syscall_r_utime(path, &times);
+	err = uk_syscall_do_utime(path, &times);
 	if (unlikely(err))
 		uk_pr_warn("%s: Failed to set modification time: %s (%d)",
 			   path, strerror(-err), -err);
 
 close_out:
-	err = uk_syscall_r_close(fd);
+	err = uk_syscall_do_close(fd);
 	if (unlikely(err)) {
 		uk_pr_err("%s: Failed to close file: %s (%d)\n",
 			  path, strerror(-err), -err);
@@ -176,12 +176,12 @@ extract_dir(const char *path, mode_t mode)
 	int r;
 
 	uk_pr_info("Creating directory %s\n", path);
-	r = uk_syscall_r_mkdir(path, mode);
+	r = uk_syscall_do_mkdir(path, mode);
 	if (unlikely(r == -EEXIST)) {
 		struct stat pstat;
 
 		uk_pr_info("Path exists, checking type\n");
-		r = uk_syscall_r_stat(path, &pstat);
+		r = uk_syscall_do_stat(path, &pstat);
 		if (unlikely(r < 0)) {
 			uk_pr_warn("%s: Cannot stat path: %s (%d)\n",
 				   path, strerror(-r), -r);
@@ -197,7 +197,7 @@ extract_dir(const char *path, mode_t mode)
 					   path, strerror(-r), -r);
 				goto err_out;
 			}
-			r = uk_syscall_r_mkdir(path, mode);
+			r = uk_syscall_do_mkdir(path, mode);
 			if (unlikely(r))
 				goto err_out;
 			else
@@ -206,7 +206,7 @@ extract_dir(const char *path, mode_t mode)
 
 		/* Directory already exists, set mode only */
 		uk_pr_info("Path exists and is dir, doing chmod\n");
-		r = uk_syscall_r_chmod(path, mode);
+		r = uk_syscall_do_chmod(path, mode);
 		if (unlikely(r < 0))
 			uk_pr_warn("%s: Failed to chmod: %s (%d)\n",
 				   path, strerror(-r), -r);
@@ -233,12 +233,12 @@ extract_symlink(const char *path, const char *contents, size_t len)
 	target[len] = 0;
 
 	uk_pr_info("%s: Target is %s\n", path, target);
-	r = uk_syscall_r_symlink(target, path);
+	r = uk_syscall_do_symlink(target, path);
 	if (r == -EEXIST) {
 		uk_pr_info("Path exists, trying removal\n");
 		r = try_remove(path);
 		if (!r)
-			r = uk_syscall_r_symlink(target, path);
+			r = uk_syscall_do_symlink(target, path);
 	}
 	if (likely(!r))
 		return UKCPIO_SUCCESS;
