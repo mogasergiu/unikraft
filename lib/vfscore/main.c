@@ -236,10 +236,11 @@ int openat(int dirfd, const char *pathname, int flags, ...)
 LFS64(openat);
 #endif /* UK_LIBC_SYSCALLS */
 
-UK_SYSCALL_DEFINE(int, creat, const char*, pathname, mode_t, mode)
+UK_SYSCALL_R_DEFINE(int, creat, const char*, pathname, mode_t, mode)
 {
-	return uk_syscall_e_open((long int) pathname,
-		O_CREAT|O_WRONLY|O_TRUNC, mode);
+	return uk_syscall_do_open((long int)pathname,
+				  O_CREAT | O_WRONLY | O_TRUNC,
+				  mode);
 }
 
 #ifdef creat64
