@@ -47,8 +47,16 @@
 		" * [ 1: 0]: Requestor Privilege Level - ring 0\n\t"	\
 		" */\n\t"						\
 		"pushq	$(0x10)\n\t"					\
-		"/* Push saving original rsp stored in r11 */\n\t"	\
+		"/* Push saving original rsp - 8 stored in r11 */\n\t"	\
 		"pushq	%r11\n\t"					\
+		"/* Above pushed rsp is actually the caller's\n\t"	\
+		" * rsp minus 8, because the call instruction\n\t"	\
+		" * pushes the address the ret instruction is\n\t"	\
+		" * supposed to return to. This means that to truly\n\t"\
+		" * mimic a trap/syscall we must store/restore\n\t"	\
+		" * the rsp we were given, plus 8.\n\t"			\
+		" */\n\t"						\
+		"addq   $8, (%rsp)\n\t"                                 \
 		"/* Push EFLAGS register. Additionally, since we\n\t"	\
 		" * pushed it with IRQs disabled, it won't have\n\t"	\
 		" * the corresponding bit flag set, making it look\n\t"	\
@@ -111,6 +119,11 @@
 		"popq	%rbx\n\t"					\
 		"/* Restore rsp from where it was stored */\n\t"	\
 		"movq   104(%rsp), %rsp\n\t"				\
+		"/* Now subtract those 8 bytes we previously added\n\t"	\
+		" * because the caller/ret do not expect the rsp to\n\t"\
+		" * not point to the actual return address.\n\t"	\
+		" */\n\t"						\
+		"subq	$8, %rsp\n\t"					\
 		"ret\n\t"						\
 	);
 
