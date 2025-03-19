@@ -38,6 +38,20 @@
 #include <uk/arch/ctx.h>
 #include <arch/syscall_prologue.h>
 
+/*
+ * Whenever the hidden Config.uk option LIBSYSCALL_SHIM_NOWRAPPER
+ * is set, the creation of libc-style wrappers are disable by the
+ * UK_SYSCALL_DEFINE() and UK_SYSCALL_R_DEFINE() macros. Alternatively,
+ * UK_LIBC_SYSCALLS can be set to 0 through compilation flags.
+ */
+#ifndef UK_LIBC_SYSCALLS
+#if CONFIG_LIBSYSCALL_SHIM && CONFIG_LIBSYSCALL_SHIM_NOWRAPPER
+#define UK_LIBC_SYSCALLS (0)
+#else
+#define UK_LIBC_SYSCALLS (1)
+#endif /* CONFIG_LIBSYSCALL_SHIM && CONFIG_LIBSYSCALL_SHIM_NOWRAPPER */
+#endif /* UK_LIBC_SYSCALLS */
+
 #if !__ASSEMBLY__
 #include <uk/config.h>
 #include <uk/essentials.h>
@@ -94,20 +108,6 @@ static inline
 void _uk_syscall_wrapper_do_exittab(struct ukarch_execenv *execenv __unused)
 { }
 #endif /* !CONFIG_LIBSYSCALL_SHIM */
-
-/*
- * Whenever the hidden Config.uk option LIBSYSCALL_SHIM_NOWRAPPER
- * is set, the creation of libc-style wrappers are disable by the
- * UK_SYSCALL_DEFINE() and UK_SYSCALL_R_DEFINE() macros. Alternatively,
- * UK_LIBC_SYSCALLS can be set to 0 through compilation flags.
- */
-#ifndef UK_LIBC_SYSCALLS
-#if CONFIG_LIBSYSCALL_SHIM && CONFIG_LIBSYSCALL_SHIM_NOWRAPPER
-#define UK_LIBC_SYSCALLS (0)
-#else
-#define UK_LIBC_SYSCALLS (1)
-#endif /* CONFIG_LIBSYSCALL_SHIM && CONFIG_LIBSYSCALL_SHIM_NOWRAPPER */
-#endif /* UK_LIBC_SYSCALLS */
 
 #define __uk_scc(X) ((long) (X))
 typedef long uk_syscall_arg_t;
@@ -454,7 +454,7 @@ typedef long uk_syscall_arg_t;
 
 #define __UK_LLSYSCALL_R_E_DEFINE(x, rtype, name, ename, rname, doname, ...)\
 	long rname(long _execenv);					\
-	long __used ename(long _execenv)				\
+	long ename(long _execenv)					\
 	{								\
 		long ret;						\
 									\
@@ -468,7 +468,7 @@ typedef long uk_syscall_arg_t;
 	static inline rtype __##rname(UK_EXECENV_DECLMAPx(UK_S_EXECENV_ARG_ACTUAL,\
 						      x, UK_S_ARG_ACTUAL,\
 						      __VA_ARGS__));	\
-	long __used rname(long _execenv)				\
+	long rname(long _execenv)					\
 	{								\
 		struct ukarch_execenv *execenv;				\
 		long ret;						\
@@ -488,7 +488,7 @@ typedef long uk_syscall_arg_t;
 		return ret;						\
 	}								\
 									\
-	long __used doname(long _execenv)				\
+	long doname(long _execenv)					\
 	{								\
 		struct ukarch_execenv *execenv;				\
 		long ret;						\
@@ -503,7 +503,7 @@ typedef long uk_syscall_arg_t;
 									\
 		return ret;						\
 	}								\
-	static inline rtype __used __##rname(UK_EXECENV_DECLMAPx(	\
+	static inline rtype __##rname(UK_EXECENV_DECLMAPx(		\
 					     UK_S_EXECENV_ARG_ACTUAL_MAYBE_UNUSED,\
 					     x, UK_S_ARG_ACTUAL_MAYBE_UNUSED,\
 					     __VA_ARGS__))
@@ -565,6 +565,74 @@ typedef long uk_syscall_arg_t;
 			       __UK_NAME2SCALLR_FN(name),		\
 			       __UK_NAME2SCALLDO_FN(name),		\
 			       __VA_ARGS__)
+#endif /* UK_LIBC_SYSCALLS */
+
+/*
+ * UK_SYSCALL_R_E_DEFINE()
+ * Based on UK_LLSYSCALL_R_E_DEFINE and provides a libc-style wrapper
+ * in case UK_LIBC_SYSCALLS is enabled
+ */
+#if UK_LIBC_SYSCALLS
+#define __UK_SYSCALL_R_E_DEFINE(x, rtype, name, ename, rname, doname, ...)\
+	long ename(UK_ARG_MAPx(x, UK_S_ARG_LONG, __VA_ARGS__));		\
+	rtype name(UK_ARG_MAPx(x, UK_S_ARG_ACTUAL, __VA_ARGS__))	\
+	{								\
+		rtype ret;						\
+									\
+		ret = (rtype) ename(					\
+			UK_ARG_MAPx(x, UK_S_ARG_CAST_LONG, __VA_ARGS__)); \
+		return ret;						\
+	}								\
+	_UK_LLSYSCALL_R_E_DEFINE(x,					\
+				 rtype,					\
+				 name,					\
+				 __UK_NAME2SCALLE_FN(e_##name),		\
+				 __UK_NAME2SCALLR_FN(e_##name),		\
+				 __UK_NAME2SCALLDO_FN(e_##name),	\
+				 __VA_ARGS__)
+#define _UK_SYSCALL_R_E_DEFINE(...) __UK_SYSCALL_R_E_DEFINE(__VA_ARGS__)
+#define UK_SYSCALL_R_E_DEFINE(rtype, name, ...)				\
+	UK_SYSCALL_EXECENV_PROLOGUE_DEFINE(__UK_NAME2SCALLE_FN(name),	\
+				       __UK_NAME2SCALLE_FN(e_##name),	\
+				       UK_NARGS(__VA_ARGS__),		\
+				       __VA_ARGS__)			\
+	UK_SYSCALL_EXECENV_PROLOGUE_DEFINE(__UK_NAME2SCALLR_FN(name),	\
+				       __UK_NAME2SCALLR_FN(e_##name),	\
+				       UK_NARGS(__VA_ARGS__),		\
+				       __VA_ARGS__)			\
+	UK_SYSCALL_EXECENV_PROLOGUE_DEFINE(__UK_NAME2SCALLDO_FN(name),	\
+				       __UK_NAME2SCALLDO_FN(e_##name),	\
+				       UK_NARGS(__VA_ARGS__),		\
+				       __VA_ARGS__)			\
+	_UK_SYSCALL_R_E_DEFINE(UK_NARGS(__VA_ARGS__),			\
+			     rtype,					\
+			     name,					\
+			     __UK_NAME2SCALLE_FN(name),			\
+			     __UK_NAME2SCALLR_FN(name),			\
+			     __UK_NAME2SCALLDO_FN(name),		\
+			     __VA_ARGS__)
+#else
+#define UK_SYSCALL_R_E_DEFINE(rtype, name, ...)				\
+	UK_SYSCALL_EXECENV_PROLOGUE_DEFINE(__UK_NAME2SCALLE_FN(name),	\
+				       __UK_NAME2SCALLE_FN(e_##name),	\
+				       UK_NARGS(__VA_ARGS__),		\
+				       __VA_ARGS__)			\
+	UK_SYSCALL_EXECENV_PROLOGUE_DEFINE(__UK_NAME2SCALLR_FN(name),	\
+				       __UK_NAME2SCALLR_FN(e_##name),	\
+				       UK_NARGS(__VA_ARGS__),		\
+				       __VA_ARGS__)			\
+	UK_SYSCALL_EXECENV_PROLOGUE_DEFINE(__UK_NAME2SCALLDO_FN(name),	\
+				       __UK_NAME2SCALLDO_FN(e_##name),	\
+				       UK_NARGS(__VA_ARGS__),		\
+				       __VA_ARGS__)			\
+	_UK_LLSYSCALL_R_E_DEFINE(UK_NARGS(__VA_ARGS__),			\
+				 rtype,					\
+				 name,					\
+				 __UK_NAME2SCALLE_FN(e_##name),		\
+				 __UK_NAME2SCALLR_FN(e_##name),		\
+				 __UK_NAME2SCALLDO_FN(e_##name),	\
+				 __VA_ARGS__)
+
 #endif /* UK_LIBC_SYSCALLS */
 
 
