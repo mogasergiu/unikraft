@@ -34,21 +34,25 @@
 #ifndef __UK_PROCESS_H__
 #define __UK_PROCESS_H__
 
-#include <arch/clone.h>
-#include <uk/config.h>
 #include <stdbool.h>
+#include <stddef.h> /* NULL */
 #include <sys/resource.h>
 #include <sys/types.h> /* pid_t */
-#if CONFIG_LIBUKSCHED
-#include <uk/thread.h>
-#endif
-#include <uk/prio.h>
-#if CONFIG_LIBPOSIX_PROCESS_CLONE
+
+#include <uk/config.h>
+#include <uk/essentials.h>
+
+#if CONFIG_LIBPOSIX_PROCESS_MULTITHREADING
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #endif
 #include <sched.h>       /* CLONE_* constants */
 #include <linux/sched.h> /* struct clone_args */
+
+#include <arch/clone.h>
+#include <uk/event.h>
+#include <uk/prio.h>
+#include <uk/thread.h>
 
 /* In case a libC is defining only a subset of our currently supported clone
  * flags, we provide here a completion of the list
@@ -131,7 +135,7 @@
 #ifndef CLONE_CLEAR_SIGHAND
 #define CLONE_CLEAR_SIGHAND	0x100000000ULL
 #endif
-#endif /* CONFIG_LIBPOSIX_PROCESS_CLONE */
+#endif /* CONFIG_LIBPOSIX_PROCESS_MULTITHREADING */
 
 int uk_sys_prlimit64(int pid, unsigned int resource,
 		     struct rlimit *new_limit, struct rlimit *old_limit);
@@ -151,14 +155,7 @@ pid_t uk_sys_gettid(void);
 pid_t uk_sys_getppid(void);
 pid_t uk_sys_getpid(void);
 
-#if CONFIG_LIBUKSCHED
-int uk_posix_process_create(struct uk_alloc *a,
-			    struct uk_thread *thread,
-			    struct uk_thread *parent);
-void uk_posix_process_kill(struct uk_thread *thread);
-#endif /* CONFIG_LIBUKSCHED */
-
-#if CONFIG_LIBPOSIX_PROCESS_CLONE
+#if CONFIG_LIBPOSIX_PROCESS_MULTITHREADING
 typedef int  (*uk_posix_clone_init_func_t)(const struct clone_args *cl_args,
 					   size_t cl_args_len,
 					   struct uk_thread *child,
@@ -218,15 +215,33 @@ struct uk_posix_clonetab_entry {
 	_UK_POSIX_CLONETAB_ENTRY(flags_mask, presence_only, init_fn, term_fn,  \
 				 UK_PRIO_LATEST)
 
-#endif /* CONFIG_LIBPOSIX_PROCESS_CLONE */
+/* Creates a pthread and attaches it to the current process
+ *
+ * DO NOT USE. This is only necessary when loading an ELF via initrd,
+ * where we want to POSIXise the kernel thread, as initrd does not
+ * support paths and therefore we cannot execve(). For more details
+ * see the implementation of app-elfloader.
+ */
+int uk_posix_process_create_pthread(struct uk_thread *thread);
 
-#if CONFIG_LIBPOSIX_PROCESS_EXECVE
+#endif /* CONFIG_LIBPOSIX_PROCESS_MULTITHREADING */
+
+#if CONFIG_LIBPOSIX_PROCESS_MULTIPROCESS
+
+/**
+ * INTERNAL. Create a new process.
+ *
+ * DO NOT USE. This is only necessary when we create a new process
+ * for main(), as there is no path to pass to execve().
+ */
+int uk_posix_process_create(struct uk_alloc *a, struct uk_thread *thread,
+			    struct uk_thread *parent);
 
 /* Data delivered to the handlers of the POSIX_PROCESS_EXECVE_EVENT */
 struct posix_process_execve_event_data {
 	struct uk_thread *thread;
 };
 
-#endif /* CONFIG_LIBPOSIX_PROCESS_EXECVE */
+#endif /* CONFIG_LIBPOSIX_PROCESS_MULTIPROCESS */
 
 #endif /* __UK_PROCESS_H__ */

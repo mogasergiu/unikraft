@@ -98,7 +98,7 @@ struct uk_sigaction {
 	__atomic refcnt;
 };
 
-#if CONFIG_LIBPOSIX_PROCESS_PIDS
+#if CONFIG_LIBPOSIX_PROCESS_MULTITHREADING
 
 /* Descriptor of a pending signal.
  *
@@ -295,6 +295,6 @@ void pprocess_signal_arch_get_ucontext(ucontext_t *ucontext,
  */
 bool pprocess_signal_is_deliverable(struct posix_thread *pthread, int signum);
 
-#endif /* CONFIG_LIBPOSIX_PROCESS_PIDS */
+#endif /* CONFIG_LIBPOSIX_PROCESS_MULTITHREADING */
 
 #endif /* __UK_PROCESS_SIGNAL_H__ */

@@ -28,14 +28,14 @@
 #include <uk/posix-fdtab-legacy.h>
 #endif /* CONFIG_LIBPOSIX_FDTAB_LEGACY_SHIM */
 
-#if CONFIG_LIBPOSIX_PROCESS_CLONE
+#if CONFIG_LIBPOSIX_PROCESS_MULTITHREADING
 #include <uk/process.h>
-#endif /* CONFIG_LIBPOSIX_PROCESS_CLONE */
+#endif /* CONFIG_LIBPOSIX_PROCESS_MULTITHREADING */
 
-#if CONFIG_LIBPOSIX_PROCESS_EXECVE
+#if CONFIG_LIBPOSIX_PROCESS_MULTIPROCESS
 #include <uk/event.h>
 #include <uk/prio.h>
-#endif /* CONFIG_LIBPOSIX_PROCESS_EXECVE */
+#endif /* CONFIG_LIBPOSIX_PROCESS_MULTIPROCESS */
 
 #define UK_FDTAB_SIZE CONFIG_LIBPOSIX_FDTAB_MAXFDS
 UK_CTASSERT(UK_FDTAB_SIZE <= UK_FD_MAX);
@@ -425,7 +425,7 @@ void uk_fdtab_cloexec(void)
 	fdtab_cleanup(active_fdtab, 0);
 }
 
-#if CONFIG_LIBPOSIX_PROCESS_EXECVE
+#if CONFIG_LIBPOSIX_PROCESS_MULTIPROCESS
 static int fdtab_handle_execve(void *data __unused)
 {
 	uk_fdtab_cloexec();
@@ -434,7 +434,7 @@ static int fdtab_handle_execve(void *data __unused)
 
 UK_EVENT_HANDLER_PRIO(POSIX_PROCESS_EXECVE_EVENT, fdtab_handle_execve,
 		      UK_PRIO_EARLIEST);
-#endif /* CONFIG_LIBPOSIX_PROCESS_EXECVE */
+#endif /* CONFIG_LIBPOSIX_PROCESS_MULTIPROCESS */
 
 /* Cleanup all leftover open fds in the initial fdtab */
 static void term_posix_fdtab(const struct uk_term_ctx *tctx __unused)
@@ -524,7 +524,7 @@ static void fdtab_thread_term(struct uk_thread *child)
 
 UK_THREAD_INIT(fdtab_thread_init, fdtab_thread_term);
 
-#if CONFIG_LIBPOSIX_PROCESS_CLONE
+#if CONFIG_LIBPOSIX_PROCESS_MULTITHREADING
 static int fdtab_clone(const struct clone_args *cl_args,
 		       size_t cl_args_len __unused,
 		       struct uk_thread *child,
@@ -555,7 +555,7 @@ static int fdtab_clone(const struct clone_args *cl_args,
 
 UK_POSIX_CLONE_HANDLER(CLONE_FILES, 0, fdtab_clone, 0);
 
-#endif /* CONFIG_LIBPOSIX_PROCESS_CLONE */
+#endif /* CONFIG_LIBPOSIX_PROCESS_MULTITHREADING */
 #endif /* CONFIG_LIBPOSIX_FDTAB_MULTITAB */
 
 /* Init fdtab as early as possible, to enable functions that rely on fds */

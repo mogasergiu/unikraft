@@ -39,8 +39,6 @@ uk_sys_gettid
 gettid
 exit
 exit_group
-uk_posix_process_create
-uk_posix_process_kill
 clone
 vfork
 kill
@@ -53,3 +51,5 @@ sigfillset
 sigismember
 sigprocmask
 tgkill
+uk_posix_process_create_pthread
+uk_posix_process_create

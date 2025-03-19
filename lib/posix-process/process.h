@@ -33,20 +33,21 @@
 #ifndef __PROCESS_H_INTERNAL__
 #define __PROCESS_H_INTERNAL__
 
-#include <uk/config.h>
 #include <sys/types.h>
+#include <uk/config.h>
 
-#if CONFIG_LIBPOSIX_PROCESS_CLONE
+#if CONFIG_LIBPOSIX_PROCESS_MULTITHREADING
 #include <linux/sched.h>
 #include <uk/arch/ctx.h>
-#endif /* CONFIG_LIBPOSIX_PROCESS_CLONE */
-
-#if CONFIG_LIBPOSIX_PROCESS_PIDS
 #include <uk/thread.h>
-
-#define TIDMAP_SIZE (CONFIG_LIBPOSIX_PROCESS_MAX_PID + 1)
+#endif /* CONFIG_LIBPOSIX_PROCESS_MULTITHREADING */
 
 extern struct uk_thread *pprocess_thread_main;
+
+#if CONFIG_LIBPOSIX_PROCESS_MULTITHREADING
+
+#define UK_PID_INIT		1
+#define TIDMAP_SIZE		(CONFIG_LIBPOSIX_PROCESS_MAX_PID + 1)
 
 /* Notice: The RUNNING state is not necessarily in sync with the state
  * of the underlying uk_thread (may be blocked by the scheduler).
@@ -119,12 +120,32 @@ struct posix_process *tid2pprocess(pid_t tid);
 pid_t ukthread2tid(struct uk_thread *thread);
 pid_t ukthread2pid(struct uk_thread *thread);
 
-void pprocess_kill_siblings(struct uk_thread *thread);
-#endif /* CONFIG_LIBPOSIX_PROCESS_PIDS */
+void pprocess_kill(struct posix_process *pprocess);
 
-#if CONFIG_LIBPOSIX_PROCESS_CLONE
+void pprocess_kill_siblings(struct uk_thread *thread);
+
+/**
+ * INTERNAL. Create pthread
+ *
+ * @param pprocess process to assign thread to
+ * @param thread   backing uk_thread to create pthread from
+ * @return pthread on success or negative value on failure
+ */
+struct posix_thread *pprocess_create_pthread(struct posix_process *pprocess,
+					     struct uk_thread *thread);
+/**
+ * INTERNAL. Create process
+ *
+ * @param alloc  allocator to assign process
+ * @param thread backing uk_thread to create process from
+ * @param parent parent processs
+ * @return process on success or negative value on failure
+ */
+int pprocess_create(struct uk_alloc *a, struct uk_thread *thread,
+		    struct uk_thread *parent);
+
 int uk_clone(struct clone_args *cl_args, size_t cl_args_len,
 	     struct ukarch_execenv *execenv);
-#endif /* CONFIG_LIBPOSIX_PROCESS_CLONE */
+#endif /* CONFIG_LIBPOSIX_PROCESS_MULTITHREADING */
 
 #endif /* __PROCESS_H_INTERNAL__ */

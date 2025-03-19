@@ -145,8 +145,8 @@ fail_tdesc_alloc:
 #else /* !CONFIG_LIBPOSIX_PROCESS_SIGNAL */
 static int uk_posix_clone_sighand(const struct clone_args *cl_args,
 				  size_t cl_args_len __unused,
-				  struct uk_thread *child,
-				  struct uk_thread *parent)
+				  struct uk_thread *child __unused,
+				  struct uk_thread *parent __unused)
 {
 	/* CLONE_SIGHAND and CLONE_CLEAR_SIGHAND should not be together */
 	if (unlikely((cl_args->flags & (CLONE_SIGHAND | CLONE_CLEAR_SIGHAND)) ==

@@ -43,7 +43,7 @@
 
 struct uk_thread *pprocess_thread_main;
 
-#if CONFIG_LIBPOSIX_PROCESS_PIDS
+#if CONFIG_LIBPOSIX_PROCESS_MULTITHREADING
 #include <uk/bitmap.h>
 #include <uk/list.h>
 #include <uk/alloc.h>
@@ -52,9 +52,7 @@ struct uk_thread *pprocess_thread_main;
 #include <uk/init.h>
 #include <uk/errptr.h>
 #include <uk/essentials.h>
-#if CONFIG_LIBPOSIX_PROCESS_CLONE
 #include <uk/process.h>
-#endif /* CONFIG_LIBPOSIX_PROCESS_CLONE */
 
 #if CONFIG_LIBPOSIX_PROCESS_SIGNAL
 #include "signal/signal.h"
@@ -123,8 +121,8 @@ static void release_tid(pid_t tid)
 }
 
 /* Allocate a thread for a process */
-static struct posix_thread *pprocess_create_pthread(
-			struct posix_process *pprocess, struct uk_thread *th)
+struct posix_thread *pprocess_create_pthread(struct posix_process *pprocess,
+					     struct uk_thread *th)
 {
 	struct posix_thread *pthread;
 	struct uk_alloc *a;
@@ -153,6 +151,8 @@ static struct posix_thread *pprocess_create_pthread(
 	pthread->process = pprocess;
 	pthread->tid = tid;
 	pthread->thread = th;
+
+	uk_thread_uktls_var(th, pthread_self) = pthread;
 
 #if CONFIG_LIBPOSIX_PROCESS_SIGNAL
 	err = pprocess_signal_tdesc_alloc(pthread);
@@ -205,6 +205,8 @@ static void pprocess_release_pthread(struct posix_thread *pthread)
 	pprocess_signal_tdesc_free(pthread);
 #endif /* CONFIG_LIBPOSIX_PROCESS_SIGNAL */
 
+	uk_thread_uktls_var(pthread->thread, pthread_self) = NULL;
+
 	/* remove from process' thread list */
 	uk_list_del_init(&pthread->thread_list_entry);
 
@@ -216,12 +218,26 @@ static void pprocess_release_pthread(struct posix_thread *pthread)
 	uk_free(pthread->_a, pthread);
 }
 
+int uk_posix_process_create_pthread(struct uk_thread *thread)
+{
+	struct posix_process *pprocess;
+	struct posix_thread *pthread;
+
+	pprocess = uk_pprocess_current();
+	UK_ASSERT(pprocess);
+
+	pthread = pprocess_create_pthread(pprocess, thread);
+	if (unlikely(PTRISERR(pthread)))
+		return PTR2ERR(pthread);
+
+	return 0;
+}
 static void pprocess_release(struct posix_process *pprocess);
 
 /* Create a new posix process for a given thread */
-int uk_posix_process_create(struct uk_alloc *a,
-			    struct uk_thread *thread,
-			    struct uk_thread *parent)
+int pprocess_create(struct uk_alloc *a,
+		    struct uk_thread *thread,
+		    struct uk_thread *parent)
 {
 	struct posix_thread  *parent_pthread  = NULL;
 	struct posix_process *parent_pprocess = NULL;
@@ -385,6 +401,12 @@ static void pprocess_release(struct posix_process *pprocess)
 	uk_free(pprocess->_a, pprocess);
 }
 
+int uk_posix_process_create(struct uk_alloc *a, struct uk_thread *thread,
+			    struct uk_thread *parent)
+{
+	return pprocess_create(a, thread, parent);
+}
+
 void pprocess_kill_siblings(struct uk_thread *thread)
 {
 	struct posix_thread *pthread, *pthreadn;
@@ -424,7 +446,7 @@ void pprocess_kill_siblings(struct uk_thread *thread)
 	}
 }
 
-static void pprocess_kill(struct posix_process *pprocess)
+void pprocess_kill(struct posix_process *pprocess)
 {
 	struct posix_thread *pthread, *pthreadn, *pthread_self = NULL;
 
@@ -471,21 +493,6 @@ static void pprocess_kill(struct posix_process *pprocess)
 	}
 }
 
-void uk_posix_process_kill(struct uk_thread *thread)
-{
-	struct posix_thread  **pthread;
-	struct posix_process *pprocess;
-
-	pthread = &uk_thread_uktls_var(thread, pthread_self);
-
-	UK_ASSERT(*pthread);
-	UK_ASSERT((*pthread)->process);
-
-	pprocess = (*pthread)->process;
-	pprocess_kill(pprocess);
-}
-
-#if CONFIG_LIBPOSIX_PROCESS_INIT_PIDS
 static int posix_process_init(struct uk_init_ctx *ictx)
 {
 	struct uk_thread *t;
@@ -505,47 +512,10 @@ static int posix_process_init(struct uk_init_ctx *ictx)
 	}
 
 	/* Create a POSIX process without parent ("init" process) */
-	return uk_posix_process_create(uk_alloc_get_default(), t, NULL);
+	return pprocess_create(uk_alloc_get_default(), t, NULL);
 }
 
 uk_late_initcall(posix_process_init, 0x0);
-#endif /* CONFIG_LIBPOSIX_PROCESS_INIT_PIDS */
-
-/* Thread initialization: Assign posix thread only if parent is part of a
- * process
- */
-static int posix_thread_init(struct uk_thread *child, struct uk_thread *parent)
-{
-	struct posix_thread *parent_pthread = NULL;
-	struct posix_thread *pthread;
-
-	if (parent) {
-		parent_pthread = uk_thread_uktls_var(parent,
-						     pthread_self);
-	}
-	if (!parent_pthread) {
-		/* parent has no posix thread, do not setup one for the child */
-		uk_pr_debug("thread %p (%s): Parent %p (%s) without process context, skipping...\n",
-			    child, child->name, parent,
-			    parent ? parent->name : "<n/a>");
-		pthread_self = NULL;
-		return 0;
-	}
-
-	UK_ASSERT(parent_pthread->process);
-
-	pthread = pprocess_create_pthread(parent_pthread->process,
-					  child);
-	if (PTRISERR(pthread))
-		return PTR2ERR(pthread);
-
-	pthread_self = pthread;
-
-	uk_pr_debug("thread %p (%s): New thread with TID: %d (PID: %d)\n",
-		    child, child->name, (int) pthread->tid,
-		    (int) pthread->process->pid);
-	return 0;
-}
 
 /* Thread release: Release TID and posix_thread */
 static void posix_thread_fini(struct uk_thread *child)
@@ -563,14 +533,13 @@ static void posix_thread_fini(struct uk_thread *child)
 		    child, child->name, (int) pthread_self->tid,
 		    (int) pprocess->pid);
 	pprocess_release_pthread(pthread_self);
-	pthread_self = NULL;
 
 	/* Release process if it became empty of threads */
 	if (uk_list_empty(&pprocess->threads))
 		pprocess_release(pprocess);
 }
 
-UK_THREAD_INIT_PRIO(posix_thread_init, posix_thread_fini, UK_PRIO_EARLIEST);
+UK_THREAD_INIT_PRIO(0, posix_thread_fini, UK_PRIO_EARLIEST);
 
 struct posix_process *pid2pprocess(pid_t pid)
 {
@@ -688,7 +657,7 @@ UK_LLSYSCALL_R_DEFINE(int, exit, int, status)
 
 static int pprocess_exit(int status __unused)
 {
-	uk_posix_process_kill(uk_thread_current()); /* won't return */
+	pprocess_kill(uk_pprocess_current()); /* won't return */
 	UK_CRASH("sys_exit_group() unexpectedly returned\n");
 	return -EFAULT;
 }
@@ -712,7 +681,6 @@ __noreturn void exit_group(int status)
 }
 #endif /* UK_LIBC_SYSCALLS */
 
-#if CONFIG_LIBPOSIX_PROCESS_CLONE
 /* Store child PID at given location for parent */
 static int pprocess_parent_settid(const struct clone_args *cl_args,
 				  size_t cl_args_len __unused,
@@ -754,13 +722,10 @@ static int pprocess_clone_thread(const struct clone_args *cl_args __unused,
 				 struct uk_thread *child __unused,
 				 struct uk_thread *parent __unused)
 {
-	UK_WARN_STUBBED();
-
 	return 0;
 }
 UK_POSIX_CLONE_HANDLER(CLONE_THREAD, false, pprocess_clone_thread, 0x0);
-#endif /* CONFIG_LIBPOSIX_PROCESS_CLONE */
-#else  /* !CONFIG_LIBPOSIX_PROCESS_PIDS */
+#else  /* !CONFIG_LIBPOSIX_PROCESS_MULTITHREADING */
 
 #define UNIKRAFT_PID      1
 #define UNIKRAFT_TID      1
@@ -781,7 +746,7 @@ pid_t uk_sys_getppid(void)
 	return UNIKRAFT_PPID;
 }
 
-#endif /* !CONFIG_LIBPOSIX_PROCESS_PIDS */
+#endif /* !CONFIG_LIBPOSIX_PROCESS_MULTITHREADING */
 
 UK_SYSCALL_R_DEFINE(pid_t, gettid)
 {
