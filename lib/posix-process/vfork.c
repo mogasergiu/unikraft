@@ -16,6 +16,25 @@
 
 #include "process.h"
 
+#if UK_LIBC_SYSCALLS
+#if CONFIG_ARCH_X86_64
+pid_t vfork(void);
+__asm__(
+	".global vfork\n\t"
+	"vfork:\n\t"
+	"jmp	uk_syscall_e_vfork\n\t"
+);
+#elif CONFIG_ARCH_ARM_64
+__asm__(
+	".global vfork\n\t"
+	"vfork:\n\t"
+	"b	uk_syscall_e_vfork\n\t"
+);
+#else /* !CONFIG_ARCH_X86_64 && !CONFIG_ARCH_ARM_64 */
+#error Unknown architecture selected
+#endif /* !CONFIG_ARCH_X86_64 && !CONFIG_ARCH_ARM_64 */
+#endif /* UK_LIBC_SYSCALLS */
+
 UK_LLSYSCALL_R_E_DEFINE(pid_t, vfork)
 {
 	struct posix_process *child_proc;
