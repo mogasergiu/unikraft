@@ -593,12 +593,94 @@ UK_LLSYSCALL_R_E_DEFINE(int, clone,
 #if UK_LIBC_SYSCALLS
 int clone(int (*fn)(void *) __unused, void *sp __unused,
 	  int flags __unused, void *arg __unused,
-	  ... /* pid_t *parent_tid, void *tls, pid_t *child_tid */)
-{
-	/* TODO */
-	errno = EINVAL;
-	return -1;
-}
+	  ... /* pid_t *parent_tid, void *tls, pid_t *child_tid */);
+
+#if CONFIG_ARCH_X86_64
+__asm__(
+	".global clone\n\t"
+	"clone:\n\t"
+	"/* Save fn and arg in callee-saved registers, but first make sure\n\t"
+	" * we can also restore them before returning in the parent.\n\t"
+	" */\n\t"
+	"pushq	%rbx\n\t"
+	"pushq	%rbp\n\t"
+	"movq	%rdi, %rbx\n\t"
+	"movq	%rcx, %rbp\n\t"
+	"/* Now reorder arguments */\n\t"
+	"/* flags */\n\t"
+	"movq	%rdx, %rdi\n\t"
+	"/* stack is already in rsi */\n\t"
+	"/* parent_tid */\n\t"
+	"movq	%r8, %rdx\n\t"
+	"/* child_tid: this is passed on the stack as it does not fit\n\t"
+	" * in the registers used for the arguments\n\t"
+	" */\n\t"
+	"movq	8(%rsp), %rcx\n\t"
+	"/* tls */\n\t"
+	"movq	%r9, %r8\n\t"
+	"call	uk_syscall_e_clone\n\t"
+	"/* Let the parent just return */\n\t"
+	"test	%eax, %eax\n\t"
+	"jnz	1f\n\t"
+	"/* The child should now just call the saved fn(arg) */\n\t"
+	"movq	%rbp, %rdi\n\t"
+	"/* Mark the outermost frame (avoid unwinding beyond this)\n\t"
+	"xorq	%rbp, %rbp\n\t"
+	"call	*%rbx\n\t"
+	"/* If managed to return from fn(arg) we must call exit(x0) */\n\t"
+	"call	uk_syscall_e_exit\n\t"
+	"0:\n\t"
+	"/* Put a hlt safeguard here, just in care, cus exit is noreturn */\n\t"
+	"hlt\n\t"
+	"jmp	0b\n\t"
+	"1:\n\t"
+	"/* Restore the registers saved in the beginning */\n\t"
+	"popq	%rbp\n\t"
+	"popq	%rbx\n\t"
+	"ret\n\t"
+);
+#elif CONFIG_ARCH_ARM_64
+__asm__(
+	".global clone\n\t"
+	"clone:\n\t"
+	"/* Save fn and arg in callee-saved registers, but first make sure\n\t"
+	" * we can also restore them before returning in the parent.\n\t"
+	" */\n\t"
+	"mov	x20, x0\n\t"
+	"mov	x21, x3\n\t"
+	"stp	x20, x21, [sp, #-16]\n\t"
+	"/* Now reorder arguments */\n\t"
+	"/* flags */\n\t"
+	"mov	x0, x2\n\t"
+	"/* stack is already in x1 */\n\t"
+	"/* parent_tid */\n\t"
+	"mov	x2, x4\n\t"
+	"/* tls */\n\t"
+	"mov	x3, x5\n\t"
+	"/* child_tid */\n\t"
+	"mov	x4, x6\n\t"
+	"bl	uk_syscall_e_clone\n\t"
+	"/* Let the parent just return */\n\t"
+	"cbnz	x0, 1f\n\t"
+	"/* Mark the outermost frame (avoid unwinding beyond this) */\n\t"
+	"mov	x29, xzr\n\t"
+	"/* The child should now just call the saved fn(arg) */\n\t"
+	"mov	x0, x21\n\t"
+	"blr	x20\n\t"
+	"/* If managed to return from fn(arg) we must call exit(x0) */\n\t"
+	"bl	uk_syscall_e_exit\n\t"
+	"0:\n\t"
+	"/* Put a wfi safeguard here, just in care, cus exit is noreturn */\n\t"
+	"wfi\n\t"
+	"b	0b\n\t"
+	"1:\n\t"
+	"/* Restore the registers saved in the beginning */\n\t"
+	"ldp	x20, x21, [sp, #-16]\n\t"
+	"ret\n\t"
+);
+#else /* !CONFIG_ARCH_X86_64 && !CONFIG_ARCH_ARM_64 */
+#error Unknown architecture selected
+#endif /* !CONFIG_ARCH_X86_64 && !CONFIG_ARCH_ARM_64 */
 #endif /* UK_LIBC_SYSCALLS */
 
 /*
