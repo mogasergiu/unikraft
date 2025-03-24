@@ -66,6 +66,22 @@
 #include <uk/arch/types.h>
 #include <uk/essentials.h>
 
+/*
+ * Mappings of `struct __regs` register fields
+ * according to AMD64 SysV ABI definition for function calls
+ *  rargX    - Arguments 0..5
+ *  rretX    - Function call return value
+ */
+
+#define __fn_rarg0		rdi
+#define __fn_rarg1		rsi
+#define __fn_rarg2		rdx
+#define __fn_rarg3		rcx
+#define __fn_rarg4		r8
+#define __fn_rarg5		r9
+
+#define __fn_rret		rax
+
 struct __regs {
 	unsigned long pad; /* 8 bytes to make struct size multiple of 16 */
 	unsigned long r15;
